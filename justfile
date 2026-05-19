@@ -18,8 +18,3 @@ check:
 
 build:
     nix build .#default
-
-# Maintenance
-
-rename NEW_NAME:
-    bash scripts/rename.sh {{NEW_NAME}}

@@ -1,13 +1,13 @@
 ---@diagnostic disable: undefined-global, redundant-parameter
 
--- Minimal init for eigenplug tests.
+-- Minimal init for prism tests.
 -- Prepends the project root to rtp and lua/ to package.path so
--- require('eigenplug.*') resolves. Used both by the headless runner
+-- require('prism.*') resolves. Used both by the headless runner
 -- and by MiniTest.new_child_neovim():restart().
 
--- Propagate rtp from EIGENPLUG_TEST_RTP env var (set by the nvim-test wrapper).
+-- Propagate rtp from PRISM_TEST_RTP env var (set by the nvim-test wrapper).
 -- Required so child neovim spawns inherit mini.nvim availability.
-local test_rtp = os.getenv('EIGENPLUG_TEST_RTP')
+local test_rtp = os.getenv('PRISM_TEST_RTP')
 if type(test_rtp) == 'string' then
   for entry in test_rtp:gmatch('[^,]+') do
     vim.opt.rtp:prepend(entry)
@@ -15,7 +15,7 @@ if type(test_rtp) == 'string' then
 end
 
 ---@type string
-local root = os.getenv('EIGENPLUG_ROOT')
+local root = os.getenv('PRISM_ROOT')
   or vim.fn.fnamemodify(vim.fn.expand('<sfile>'), ':h:h')
 local lua_dir = root .. '/lua'
 

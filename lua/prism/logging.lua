@@ -1,6 +1,6 @@
---- eigenplug.logging: structured ring buffer with vim.notify facade.
+--- prism.logging: structured ring buffer with vim.notify facade.
 
----@class eigenplug.LogEntry
+---@class prism.LogEntry
 ---@field ts    number    monotonic ms (vim.uv.hrtime() / 1e6)
 ---@field level integer   vim.log.levels.*
 ---@field msg   string    raw message
@@ -9,13 +9,13 @@
 local M = {}
 
 local CAPACITY = 500
-local ring = {} ---@type eigenplug.LogEntry[]
+local ring = {} ---@type prism.LogEntry[]
 local head = 1
 local count = 0
 local seq = 0
-local subscribers = {} ---@type fun(entry: eigenplug.LogEntry)[]
+local subscribers = {} ---@type fun(entry: prism.LogEntry)[]
 
----@param entry eigenplug.LogEntry
+---@param entry prism.LogEntry
 local function push(entry)
   ring[head] = entry
   head = (head % CAPACITY) + 1
@@ -25,7 +25,7 @@ local function push(entry)
 end
 
 ---@nodiscard
----@return eigenplug.LogEntry[]
+---@return prism.LogEntry[]
 function M.get_all()
   if count == 0 then
     return {}
@@ -45,12 +45,12 @@ function M.clear()
   count = 0
 end
 
----@param fn fun(entry: eigenplug.LogEntry)
+---@param fn fun(entry: prism.LogEntry)
 function M.on_change(fn)
   subscribers[#subscribers + 1] = fn
 end
 
----@param fn fun(entry: eigenplug.LogEntry)
+---@param fn fun(entry: prism.LogEntry)
 function M.off_change(fn)
   for i, sub in ipairs(subscribers) do
     if sub == fn then
@@ -77,7 +77,7 @@ local function emit(level, msg)
   end
 
   if level ~= vim.log.levels.DEBUG then
-    vim.notify(msg, level, { title = "eigenplug" })
+    vim.notify(msg, level, { title = "prism" })
   end
 end
 

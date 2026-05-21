@@ -16,8 +16,13 @@ local current = {}
 --- (in registration / priority order) get assigned to slots 1..MAX_SLOTS.
 --- Slots whose occupant changed are re-emitted; unchanged slots are left
 --- alone so kitty receives only the minimum bytes needed.
+---
+--- Returns the number of escape codes emitted (set_slot + clear_slot
+--- calls). Used by prism.stats for diagnostics.
 ---@param desired prism.Registration[]
+---@return integer emitted
 function M.reconcile(desired)
+  local emitted = 0
   for i = 1, M.MAX_SLOTS do
     local cur = current[i]
     local nxt = desired[i]
@@ -28,8 +33,10 @@ function M.reconcile(desired)
         terminal.clear_slot(i)
       end
       current[i] = nxt
+      emitted = emitted + 1
     end
   end
+  return emitted
 end
 
 --- Clear every occupied slot. Used on shutdown after the color stack pop

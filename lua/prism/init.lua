@@ -5,6 +5,7 @@ local events = require("prism.events")
 local log = require("prism.logging")
 local registry = require("prism.registry")
 local slots = require("prism.slots")
+local stats = require("prism.stats")
 local terminal = require("prism.terminal")
 
 ---@class prism
@@ -111,6 +112,16 @@ function M.disable()
   slots.clear_all()
   terminal.pop()
   active = false
+end
+
+---@nodiscard
+---@return prism.stats.Snapshot
+function M.stats()
+  return stats.snapshot()
+end
+
+function M.reset_stats()
+  stats.reset()
 end
 
 return M

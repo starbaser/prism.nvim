@@ -3,6 +3,7 @@
 local registry = require("prism.registry")
 local scanner = require("prism.scanner")
 local slots = require("prism.slots")
+local stats = require("prism.stats")
 local terminal = require("prism.terminal")
 
 local M = {}
@@ -13,11 +14,23 @@ M.debounce_ms = 50
 ---@type uv.uv_timer_t?
 local timer = nil
 
+local function count_keys(t)
+  local n = 0
+  for _ in pairs(t) do n = n + 1 end
+  return n
+end
+
 local function do_refresh()
   local registered = registry.registered_names()
+  local t0 = vim.uv.hrtime()
   local visible = scanner.collect_visible(registered)
   local desired = registry.filter_visible(visible)
-  slots.reconcile(desired)
+  local t1 = vim.uv.hrtime()
+  stats.record_scan(t1 - t0, count_keys(visible))
+
+  local emitted = slots.reconcile(desired)
+  local t2 = vim.uv.hrtime()
+  stats.record_reconcile(t2 - t1, #desired, emitted)
 end
 
 --- Coalesce many events into a single refresh after `debounce_ms` idle.

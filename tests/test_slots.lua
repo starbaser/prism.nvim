@@ -46,11 +46,19 @@ end
 T["slots"]["fills two new slots"] = function()
   local r1 = reg("A", 1, 0x111111, 0.5)
   local r2 = reg("B", 2, 0x222222, 0.4)
-  slots.reconcile({ r1, r2 })
+  local emitted = slots.reconcile({ r1, r2 })
+  eq(emitted, 2)
   eq(set_spy.call_count, 2)
   eq(clear_spy.call_count, 0)
   eq(set_spy.calls[1], { 1, 0x111111, 0.5 })
   eq(set_spy.calls[2], { 2, 0x222222, 0.4 })
+end
+
+T["slots"]["reconcile returns 0 when nothing changes"] = function()
+  local r1 = reg("A", 1, 0x111111, 0.5)
+  slots.reconcile({ r1 })
+  local emitted = slots.reconcile({ r1 })
+  eq(emitted, 0)
 end
 
 T["slots"]["unchanged slot is not re-emitted"] = function()

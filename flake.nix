@@ -97,6 +97,10 @@
       checks = lib.mapAttrs (_: v: v.checks) perSystem;
       devShells = lib.mapAttrs (_: v: v.devShells) perSystem;
 
+      nvfModules.default = import ./nix/nvf-module.nix {
+        prism-nvim = perSystem.x86_64-linux.packages.default;
+      };
+
       overlays.default = final: _prev: {
         vimPlugins = _prev.vimPlugins // {
           "prism.nvim" = self.packages.${final.system}.default;

@@ -11,19 +11,23 @@ local terminal = require("prism.terminal")
 local M = {}
 
 ---@class prism.GroupSpec
----@field name string
+---@field name    string
+---@field opacity number
+
+---@class prism.ColorSpec
+---@field color   integer|string  0xRRGGBB or "#RRGGBB"
 ---@field opacity number
 
 ---@class prism.Opts
 ---@field groups       prism.GroupSpec[]
+---@field colors       prism.ColorSpec[]
 ---@field debounce_ms  integer
----@field scan_step    integer
 
 ---@type prism.Opts
 local defaults = {
   groups = {},
+  colors = {},
   debounce_ms = 50,
-  scan_step = 1,
 }
 
 local active = false
@@ -47,9 +51,14 @@ function M.setup(opts)
   end
 
   terminal.push()
+  -- Colors first so groups nudge around any raw value collisions.
+  for _, c in ipairs(defaults.colors) do
+    registry.register_color(c.color, c.opacity)
+  end
   for _, g in ipairs(defaults.groups) do
     registry.register(g.name, g.opacity)
   end
+  registry.rebuild_color_index()
   events.attach(defaults)
   events.schedule_refresh()
   active = true
@@ -59,17 +68,30 @@ end
 ---@param opacity number
 function M.register(name, opacity)
   local reg = registry.register(name, opacity)
+  if reg then
+    registry.rebuild_color_index()
+    events.schedule_refresh()
+  end
+  return reg
+end
+
+---@param color integer|string
+---@param opacity number
+function M.register_color(color, opacity)
+  local reg = registry.register_color(color, opacity)
   if reg then events.schedule_refresh() end
   return reg
 end
 
----@param name string
-function M.unregister(name)
-  registry.unregister(name)
+---@param key string|integer
+function M.unregister(key)
+  registry.unregister(key)
+  registry.rebuild_color_index()
   events.schedule_refresh()
 end
 
 function M.refresh()
+  registry.rebuild_color_index()
   events.schedule_refresh()
 end
 

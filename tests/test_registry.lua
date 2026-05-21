@@ -19,6 +19,8 @@ T["registry"] = new_set({
       vim.api.nvim_set_hl(0, "PrismTestB", { bg = 0x000000 })
       vim.api.nvim_set_hl(0, "PrismTestC", { bg = 0xff0000, fg = 0xffffff, bold = true })
       vim.api.nvim_set_hl(0, "PrismTestNoBg", { fg = 0xffffff })
+      -- Normal needs a known bg for the no-bg-fallback path.
+      vim.api.nvim_set_hl(0, "Normal", { bg = 0x808080 })
     end,
   },
 })
@@ -50,7 +52,18 @@ T["registry"]["register preserves fg, bold, and other attrs"] = function()
   eq(hl.bg, 0xff0001)
 end
 
-T["registry"]["register skips groups with no bg"] = function()
+T["registry"]["register falls back to Normal.bg when group has no bg"] = function()
+  local reg = registry.register("PrismTestNoBg", 0.5)
+  eq(reg ~= nil, true)
+  eq(reg.original_bg, 0x808080) -- Normal.bg
+  eq(reg.nudged_bg, 0x808081)   -- Normal.bg + index 1
+  -- And the group now has the nudged bg so its cells get keyed.
+  local hl = vim.api.nvim_get_hl(0, { name = "PrismTestNoBg", link = false })
+  eq(hl.bg, 0x808081)
+end
+
+T["registry"]["register skips when Normal also has no bg"] = function()
+  vim.api.nvim_set_hl(0, "Normal", {})
   local reg = registry.register("PrismTestNoBg", 0.5)
   eq(reg, nil)
   eq(#registry.all(), 0)
@@ -101,6 +114,109 @@ T["registry"]["filter_visible preserves registration order"] = function()
   eq(#got, 2)
   eq(got[1].name, "PrismTestA")
   eq(got[2].name, "PrismTestC")
+end
+
+T["registry"]["register_color stores raw value, no nudge, no hl mutation"] = function()
+  local reg = registry.register_color(0xabc123, 0.5)
+  eq(reg ~= nil, true)
+  eq(reg.color_only, true)
+  eq(reg.name, nil)
+  eq(reg.original_bg, nil)
+  eq(reg.nudged_bg, 0xabc123)
+  eq(reg.opacity, 0.5)
+end
+
+T["registry"]["register_color accepts hex string"] = function()
+  local reg = registry.register_color("#abc123", 0.5)
+  eq(reg.nudged_bg, 0xabc123)
+  local reg2 = registry.register_color("DEAD11", 0.5)
+  eq(reg2.nudged_bg, 0xDEAD11)
+end
+
+T["registry"]["register_color rejects invalid input"] = function()
+  eq(registry.register_color("not a color", 0.5), nil)
+  eq(registry.register_color(-1, 0.5), nil)
+  eq(registry.register_color(0x1000000, 0.5), nil)
+  eq(#registry.all(), 0)
+end
+
+T["registry"]["register_color rejects collision with existing"] = function()
+  registry.register_color(0xabc123, 0.5)
+  local reg = registry.register_color(0xabc123, 0.3)
+  eq(reg, nil)
+  eq(#registry.all(), 1)
+end
+
+T["registry"]["group nudge skips around pre-registered colors"] = function()
+  -- 0x000000 + 1 = 0x000001 would be the natural nudge for PrismTestA;
+  -- reserving that slot first should force PrismTestA to 0x000002.
+  registry.register_color(0x000001, 0.5)
+  local reg = registry.register("PrismTestA", 0.4)
+  eq(reg.nudged_bg, 0x000002)
+end
+
+T["registry"]["rebuild_color_index maps bg -> group names"] = function()
+  vim.api.nvim_set_hl(0, "PrismIdxA", { bg = 0xdeadbe })
+  vim.api.nvim_set_hl(0, "PrismIdxB", { bg = 0xdeadbe })
+  registry.register_color(0xdeadbe, 0.5)
+  registry.rebuild_color_index()
+  -- Both groups match; visibility of either should slot the color.
+  local got = registry.filter_visible({ PrismIdxA = true })
+  eq(#got, 1)
+  eq(got[1].color_only, true)
+end
+
+T["registry"]["filter_visible excludes color with no matching group visible"] = function()
+  vim.api.nvim_set_hl(0, "PrismIdxC", { bg = 0xbeefca })
+  registry.register_color(0xbeefca, 0.5)
+  registry.rebuild_color_index()
+  local got = registry.filter_visible({})
+  eq(#got, 0)
+end
+
+T["registry"]["filter_visible excludes color with no group having that bg"] = function()
+  registry.register_color(0xffaa00, 0.5)
+  registry.rebuild_color_index()
+  local got = registry.filter_visible({ AnyOtherName = true })
+  eq(#got, 0)
+end
+
+T["registry"]["filter_visible interleaves groups and colors by registration order"] = function()
+  vim.api.nvim_set_hl(0, "PrismMix", { bg = 0xc0ffee })
+  registry.register("PrismTestA", 0.4)       -- index 1, name-gated
+  registry.register_color(0xc0ffee, 0.3)     -- index 2, color-gated via PrismMix
+  registry.register("PrismTestC", 0.2)       -- index 3, name-gated
+  registry.rebuild_color_index()
+  local got = registry.filter_visible({
+    PrismTestA = true,
+    PrismMix = true,
+    PrismTestC = true,
+  })
+  eq(#got, 3)
+  eq(got[1].name, "PrismTestA")
+  eq(got[2].color_only, true)
+  eq(got[2].nudged_bg, 0xc0ffee)
+  eq(got[3].name, "PrismTestC")
+end
+
+T["registry"]["unregister removes a color-only registration"] = function()
+  registry.register_color(0xabc123, 0.5)
+  registry.register("PrismTestA", 0.4)
+  registry.unregister("#abc123")
+  eq(#registry.all(), 1)
+  eq(registry.all()[1].name, "PrismTestA")
+  eq(registry.all()[1].index, 1)
+end
+
+T["registry"]["on_colorscheme preserves color-only registrations verbatim"] = function()
+  registry.register_color(0xabc123, 0.5)
+  registry.register("PrismTestA", 0.4)
+  registry.on_colorscheme()
+  local all = registry.all()
+  eq(#all, 2)
+  eq(all[1].color_only, true)
+  eq(all[1].nudged_bg, 0xabc123)
+  eq(all[2].name, "PrismTestA")
 end
 
 return T

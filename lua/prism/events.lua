@@ -14,7 +14,8 @@ M.debounce_ms = 50
 local timer = nil
 
 local function do_refresh()
-  local visible = scanner.collect_visible()
+  local registered = registry.registered_names()
+  local visible = scanner.collect_visible(registered)
   local desired = registry.filter_visible(visible)
   slots.reconcile(desired)
 end
@@ -52,10 +53,9 @@ local REFRESH_EVENTS = {
   "TabEnter",
 }
 
----@param opts { debounce_ms: integer, scan_step: integer }
+---@param opts { debounce_ms: integer }
 function M.attach(opts)
   M.debounce_ms = opts.debounce_ms
-  scanner.scan_step = opts.scan_step
 
   vim.api.nvim_create_augroup(AUGROUP, { clear = true })
 
@@ -70,6 +70,7 @@ function M.attach(opts)
     group = AUGROUP,
     callback = function()
       registry.on_colorscheme()
+      scanner.on_colorscheme()
       M.schedule_refresh()
     end,
   })

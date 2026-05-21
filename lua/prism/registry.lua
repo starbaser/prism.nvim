@@ -1,21 +1,24 @@
 --- prism.registry: priority-ordered registration with bg-color nudging.
 ---
---- Each registered highlight group gets its background color nudged by a
---- small per-registration offset, so every entry has a globally unique
---- 24-bit bg key. Kitty's transparent_background_colorN slots match cells
---- by exact bg color, so this nudge guarantees one-to-one mapping between
---- registered groups and slot color keys.
+--- Two registration paths share the same priority list:
+---   * groups[]: name-keyed; bg read from the live hl group, nudged by index
+---     to a unique 24-bit key, then written back. Visibility is gated on the
+---     group's name appearing in the scanner's visible_names set.
+---   * colors[]: raw RGB; stored as-is (no nudge). Visibility is gated on
+---     ANY currently-defined hl group having that exact bg AND appearing in
+---     visible_names, looked up via a color_index built from nvim_get_hl(0,{}).
 
 local log = require("prism.logging")
 
 local M = {}
 
 ---@class prism.Registration
----@field name        string   highlight group name
----@field opacity     number   0.0..1.0 (or -1 = use kitty background_opacity)
----@field index       integer  1-based registration position (= priority)
----@field nudged_bg   integer  unique 24-bit bg value written into the hl group
----@field original_bg integer  original bg from the colorscheme
+---@field name        string?   nil for color-only registrations
+---@field opacity     number    0.0..1.0 (or -1 = use kitty background_opacity)
+---@field index       integer   1-based registration position (= priority)
+---@field nudged_bg   integer   unique 24-bit bg value (= kitty slot color key)
+---@field original_bg integer?  pre-registration bg; nil for color-only
+---@field color_only  boolean   true when registered via colors[], not groups[]
 
 ---@type prism.Registration[]
 local registrations = {}
@@ -23,7 +26,11 @@ local registrations = {}
 ---@type table<string, prism.Registration>
 local by_name = {}
 
---- Mask to keep the value in 24 bits.
+--- bg value -> list of currently-defined hl group names with that bg.
+--- Rebuilt on setup, on ColorScheme, and on :PrismRefresh.
+---@type table<integer, string[]>
+local color_index = {}
+
 local RGB_MASK = 0xFFFFFF
 
 ---@param n integer
@@ -50,8 +57,20 @@ function M._nudge(orig, index)
   return n
 end
 
---- Apply a registration's nudged_bg to the live highlight group, preserving
---- all other attributes (fg, bold, italic, etc.).
+---@param c integer|string
+---@return integer?
+local function parse_color(c)
+  if type(c) == "number" then
+    return c >= 0 and c <= RGB_MASK and c or nil
+  end
+  if type(c) == "string" then
+    local hex = c:gsub("^#", "")
+    local n = tonumber(hex, 16)
+    if n and n >= 0 and n <= RGB_MASK then return n end
+  end
+  return nil
+end
+
 ---@param reg prism.Registration
 local function apply_hl(reg)
   local hl = vim.api.nvim_get_hl(0, { name = reg.name, link = false })
@@ -61,7 +80,13 @@ local function apply_hl(reg)
 end
 
 --- Register a highlight group. Returns the registration on success or nil
---- if the group has no bg (kitty cannot key transparency without one).
+--- if the group has no bg AND Normal has no bg (kitty needs a key).
+---
+--- Fallback: when the group itself has no bg (e.g. Terminal links to Normal
+--- but no explicit bg propagated), we synthesize one from Normal.bg. The
+--- nudge then makes the group's cells distinct from raw Normal cells so
+--- kitty slots them independently. User-visible: Terminal cells render with
+--- a near-Normal bg shifted by a few LSBs — imperceptible.
 ---@param name string
 ---@param opacity number
 ---@return prism.Registration?
@@ -71,37 +96,91 @@ function M.register(name, opacity)
     return by_name[name]
   end
   local hl = vim.api.nvim_get_hl(0, { name = name, link = false })
-  if not hl or not hl.bg then
-    log.warn(string.format("prism: %s has no bg; skipping", name))
-    return nil
+  local original_bg = hl and hl.bg
+  if not original_bg then
+    local normal = vim.api.nvim_get_hl(0, { name = "Normal", link = false })
+    if normal and normal.bg then
+      original_bg = normal.bg
+      log.debug(string.format("prism: %s has no bg; falling back to Normal.bg", name))
+    else
+      log.warn(string.format("prism: %s has no bg and Normal has no bg; skipping", name))
+      return nil
+    end
   end
+  ---@cast original_bg integer
   local idx = #registrations + 1
   local reg = {
     name = name,
     opacity = opacity,
     index = idx,
-    original_bg = hl.bg,
+    original_bg = original_bg,
     nudged_bg = 0,
+    color_only = false,
   }
-  reg.nudged_bg = M._nudge(hl.bg, idx)
+  reg.nudged_bg = M._nudge(original_bg, idx)
   registrations[idx] = reg
   by_name[name] = reg
   apply_hl(reg)
   return reg
 end
 
---- Unregister a highlight group and restore its original bg.
----@param name string
-function M.unregister(name)
-  local reg = by_name[name]
+--- Register a raw 24-bit color. Stored verbatim — no nudging, no hl group
+--- modification. Visibility is determined by checking whether any defined
+--- hl group with this exact bg is in the scanner's visible_names set.
+---@param color integer|string
+---@param opacity number
+---@return prism.Registration?
+function M.register_color(color, opacity)
+  local rgb = parse_color(color)
+  if not rgb then
+    log.warn(string.format("prism: invalid color %s; skipping", tostring(color)))
+    return nil
+  end
+  if is_used_nudge(rgb) then
+    log.warn(string.format("prism: color #%06x collides with existing registration; skipping", rgb))
+    return nil
+  end
+  local idx = #registrations + 1
+  local reg = {
+    name = nil,
+    opacity = opacity,
+    index = idx,
+    original_bg = nil,
+    nudged_bg = rgb,
+    color_only = true,
+  }
+  registrations[idx] = reg
+  return reg
+end
+
+--- Unregister a highlight group and restore its original bg. For color-only
+--- registrations, pass the raw color value (int or "#hex").
+---@param key string|integer
+function M.unregister(key)
+  local reg
+  if type(key) == "string" and not key:match("^#") then
+    reg = by_name[key]
+  else
+    local rgb = parse_color(key)
+    for _, r in ipairs(registrations) do
+      if r.color_only and r.nudged_bg == rgb then
+        reg = r
+        break
+      end
+    end
+  end
   if not reg then return end
-  local hl = vim.api.nvim_get_hl(0, { name = name, link = false })
-  hl.bg = reg.original_bg
-  ---@diagnostic disable-next-line: param-type-mismatch
-  vim.api.nvim_set_hl(0, name, hl)
-  by_name[name] = nil
+
+  if not reg.color_only then
+    local hl = vim.api.nvim_get_hl(0, { name = reg.name, link = false })
+    hl.bg = reg.original_bg
+    ---@diagnostic disable-next-line: param-type-mismatch
+    vim.api.nvim_set_hl(0, reg.name, hl)
+    by_name[reg.name] = nil
+  end
+
   for i, r in ipairs(registrations) do
-    if r.name == name then
+    if r == reg then
       table.remove(registrations, i)
       break
     end
@@ -111,15 +190,37 @@ function M.unregister(name)
   end
 end
 
---- Re-resolve and re-apply all nudges after a colorscheme change.
---- The colorscheme will have overwritten our nudged values with its own
---- bg values, so we recompute the originals and the nudges and re-write.
+--- Re-resolve and re-apply all registrations after a colorscheme change.
+--- For groups: the colorscheme overwrote our nudges, so re-read & re-nudge.
+--- For colors: the raw value is preserved; only the index is rebuilt.
 function M.on_colorscheme()
   local saved = registrations
   registrations = {}
   by_name = {}
   for _, r in ipairs(saved) do
-    M.register(r.name, r.opacity)
+    if r.color_only then
+      M.register_color(r.nudged_bg, r.opacity)
+    else
+      M.register(r.name, r.opacity)
+    end
+  end
+  M.rebuild_color_index()
+end
+
+--- Walk every currently-defined hl group and build a bg -> {names} index.
+--- Used to determine visibility for color-only registrations.
+function M.rebuild_color_index()
+  color_index = {}
+  local all_hl = vim.api.nvim_get_hl(0, {})
+  for name, def in pairs(all_hl) do
+    if not def.link and def.bg then
+      local bucket = color_index[def.bg]
+      if not bucket then
+        bucket = {}
+        color_index[def.bg] = bucket
+      end
+      bucket[#bucket + 1] = name
+    end
   end
 end
 
@@ -127,6 +228,19 @@ end
 ---@return prism.Registration[]
 function M.all()
   return registrations
+end
+
+--- The set of registered group names (color-only registrations excluded).
+--- Used by scanner's tier-3 state augmentation to decide which window-state
+--- gates to evaluate — we only burn a syscall if the user actually cares.
+---@nodiscard
+---@return table<string, true>
+function M.registered_names()
+  local out = {}
+  for _, r in ipairs(registrations) do
+    if r.name then out[r.name] = true end
+  end
+  return out
 end
 
 ---@param name string
@@ -139,17 +253,35 @@ end
 function M._reset()
   registrations = {}
   by_name = {}
+  color_index = {}
 end
 
---- Filter the registration list to those whose names appear in `visible`,
---- preserving registration order. The slot reconciler caps the result at
---- the slot count.
----@param visible table<string, true>
+--- Filter the registration list to those currently visible:
+---   * group entries: visible iff the group's name is in `visible_names`
+---   * color entries: visible iff any group in color_index[nudged_bg] is in `visible_names`
+--- Order is preserved from registration order; the slot reconciler caps the
+--- result at the slot count.
+---@param visible_names table<string, true>
 ---@return prism.Registration[]
-function M.filter_visible(visible)
+function M.filter_visible(visible_names)
   local out = {}
   for _, r in ipairs(registrations) do
-    if visible[r.name] then
+    local is_visible
+    if r.color_only then
+      is_visible = false
+      local groups = color_index[r.nudged_bg]
+      if groups then
+        for _, g in ipairs(groups) do
+          if visible_names[g] then
+            is_visible = true
+            break
+          end
+        end
+      end
+    else
+      is_visible = visible_names[r.name] == true
+    end
+    if is_visible then
       out[#out + 1] = r
     end
   end

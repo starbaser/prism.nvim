@@ -8,7 +8,7 @@ local EMPTY_HL = "PrismSlotEmpty"
 local COLOR_HL_PREFIX = "PrismSlotColor_"
 
 local defaults = {
-  slot_icon = "󰜌",
+  slot_icon = "󰜌 ",
   empty_icon = "·",
   slot_separator = "",
   show_empty = true,

@@ -1,4 +1,4 @@
---- prism.nvim entry point.
+--- prism.nvim
 
 if vim.g.loaded_prism then
   return
@@ -17,27 +17,27 @@ vim.api.nvim_create_user_command("PrismStatus", function()
   }
   for _, r in ipairs(s.registrations) do
     if r.color_only then
-      lines[#lines + 1] = string.format(
-        "  [%d] (color)        opacity=%.3f  bg=#%06x",
-        r.index, r.opacity, r.nudged_bg
-      )
+      lines[#lines + 1] = string.format("  [%d] (color)        opacity=%.3f  bg=#%06x", r.index, r.opacity, r.nudged_bg)
     else
       lines[#lines + 1] = string.format(
         "  [%d] %-16s opacity=%.3f  bg=#%06x (orig #%06x)",
-        r.index, r.name, r.opacity, r.nudged_bg, r.original_bg
+        r.index,
+        r.name,
+        r.opacity,
+        r.nudged_bg,
+        r.original_bg
       )
     end
   end
   lines[#lines + 1] = "slots:"
   for i = 1, 7 do
     local r = s.slots[i]
-    lines[#lines + 1] = string.format(
-      "  %d -> %s",
-      i, r and r.name or "(empty)"
-    )
+    lines[#lines + 1] = string.format("  %d -> %s", i, r and r.name or "(empty)")
   end
   vim.api.nvim_echo(
-    vim.tbl_map(function(l) return { l, "Normal" } end, lines),
+    vim.tbl_map(function(l)
+      return { l, "Normal" }
+    end, lines),
     false,
     {}
   )
@@ -53,20 +53,31 @@ vim.api.nvim_create_user_command("PrismStats", function()
     "prism stats:",
     string.format(
       "  scan      count=%-6d  last=%7.1fus  mean=%7.1fus  min=%7.1fus  max=%7.1fus",
-      s.scan.count, s.scan.last_us, s.scan.mean_us, s.scan.min_us, s.scan.max_us
+      s.scan.count,
+      s.scan.last_us,
+      s.scan.mean_us,
+      s.scan.min_us,
+      s.scan.max_us
     ),
     string.format(
       "  reconcile count=%-6d  last=%7.1fus  mean=%7.1fus  min=%7.1fus  max=%7.1fus",
-      s.reconcile.count, s.reconcile.last_us, s.reconcile.mean_us,
-      s.reconcile.min_us, s.reconcile.max_us
+      s.reconcile.count,
+      s.reconcile.last_us,
+      s.reconcile.mean_us,
+      s.reconcile.min_us,
+      s.reconcile.max_us
     ),
     string.format(
       "  emissions=%d  last_visible=%d  last_desired=%d",
-      s.emissions, s.last_visible_count, s.last_desired_count
+      s.emissions,
+      s.last_visible_count,
+      s.last_desired_count
     ),
   }
   vim.api.nvim_echo(
-    vim.tbl_map(function(l) return { l, "Normal" } end, lines),
+    vim.tbl_map(function(l)
+      return { l, "Normal" }
+    end, lines),
     false,
     {}
   )

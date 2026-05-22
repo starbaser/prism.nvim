@@ -33,6 +33,28 @@ local color_index = {}
 
 local RGB_MASK = 0xFFFFFF
 
+---@param rgb integer
+---@return integer r
+---@return integer g
+---@return integer b
+local function unpack_rgb(rgb)
+  local r = math.floor(rgb / 0x10000) % 0x100
+  local g = math.floor(rgb / 0x100) % 0x100
+  local b = rgb % 0x100
+  return r, g, b
+end
+
+---@param r integer
+---@param g integer
+---@param b integer
+---@return integer?
+local function pack_rgb(r, g, b)
+  if r < 0 or r > 0xff or g < 0 or g > 0xff or b < 0 or b > 0xff then
+    return nil
+  end
+  return r * 0x10000 + g * 0x100 + b
+end
+
 ---@param n integer
 local function is_used_nudge(n)
   for _, r in ipairs(registrations) do
@@ -50,11 +72,26 @@ end
 ---@param index integer
 ---@return integer
 function M._nudge(orig, index)
-  local n = (orig + index) % (RGB_MASK + 1)
-  while is_used_nudge(n) or n == orig do
-    n = (n + 1) % (RGB_MASK + 1)
+  local r, g, b = unpack_rgb(orig)
+  local function available(n)
+    return n and n ~= orig and not is_used_nudge(n)
   end
-  return n
+  for offset = 0, 0xfe do
+    local step = ((index + offset - 1) % 0xff) + 1
+    local n = pack_rgb(r, g, b + step)
+    if available(n) then return n end
+    n = pack_rgb(r, g, b - step)
+    if available(n) then return n end
+    n = pack_rgb(r, g + step, b)
+    if available(n) then return n end
+    n = pack_rgb(r, g - step, b)
+    if available(n) then return n end
+    n = pack_rgb(r + step, g, b)
+    if available(n) then return n end
+    n = pack_rgb(r - step, g, b)
+    if available(n) then return n end
+  end
+  error(string.format("prism: exhausted RGB nudge space for #%06x", orig))
 end
 
 ---@param c integer|string

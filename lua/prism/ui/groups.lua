@@ -4,6 +4,7 @@ local signals = require("prism.signals")
 
 local M = {}
 
+local FILETYPE = "prism-groups"
 local NS = vim.api.nvim_create_namespace("prism_groups_float")
 
 ---@class prism.ui.groups.State
@@ -20,6 +21,35 @@ end
 
 local function buf_valid()
   return state.buf and vim.api.nvim_buf_is_valid(state.buf)
+end
+
+---@param buf integer
+---@return boolean
+local function is_group_buffer(buf)
+  if not vim.api.nvim_buf_is_valid(buf) then return false end
+  return vim.b[buf].prism_groups_float == true
+    or vim.bo[buf].filetype == FILETYPE
+end
+
+---@param except_win? integer
+local function close_group_windows(except_win)
+  for _, win in ipairs(vim.api.nvim_list_wins()) do
+    if win ~= except_win and vim.api.nvim_win_is_valid(win) then
+      local buf = vim.api.nvim_win_get_buf(win)
+      if is_group_buffer(buf) then
+        pcall(vim.api.nvim_win_close, win, true)
+      end
+    end
+  end
+end
+
+---@param except_buf? integer
+local function delete_group_buffers(except_buf)
+  for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+    if buf ~= except_buf and is_group_buffer(buf) then
+      pcall(vim.api.nvim_buf_delete, buf, { force = true })
+    end
+  end
 end
 
 ---@return string[]
@@ -52,10 +82,11 @@ end
 local function ensure_buffer()
   if buf_valid() then return end
   state.buf = vim.api.nvim_create_buf(false, true)
+  vim.b[state.buf].prism_groups_float = true
   vim.bo[state.buf].buftype = "nofile"
   vim.bo[state.buf].bufhidden = "wipe"
   vim.bo[state.buf].swapfile = false
-  vim.bo[state.buf].filetype = "prism-groups"
+  vim.bo[state.buf].filetype = FILETYPE
   vim.keymap.set("n", "q", M.close, { buffer = state.buf, silent = true, nowait = true })
   vim.keymap.set("n", "<Esc>", M.close, { buffer = state.buf, silent = true, nowait = true })
 end
@@ -120,12 +151,20 @@ function M.refresh()
     style = "minimal",
     border = "none",
   })
+  vim.wo[state.win].wrap = false
 end
 
 ---@param opts? table
 ---@return integer win
 function M.open(opts)
   opts = opts or {}
+  if win_valid() then
+    close_group_windows(state.win)
+    delete_group_buffers(state.buf)
+  else
+    close_group_windows()
+    delete_group_buffers()
+  end
   ensure_buffer()
 
   local names = registered_names()
@@ -143,6 +182,7 @@ function M.open(opts)
       border = "none",
       zindex = 60,
     }, opts))
+    vim.wo[state.win].wrap = false
   else
     M.refresh()
     vim.api.nvim_set_current_win(state.win)
@@ -153,14 +193,12 @@ function M.open(opts)
 end
 
 function M.close()
-  if win_valid() then
-    pcall(vim.api.nvim_win_close, state.win, true)
-  end
-  if buf_valid() then
-    pcall(vim.api.nvim_buf_delete, state.buf, { force = true })
-  end
+  close_group_windows()
+  delete_group_buffers()
   if state.augroup then
     pcall(vim.api.nvim_del_augroup_by_id, state.augroup)
+  else
+    pcall(vim.api.nvim_del_augroup_by_name, "prism_groups_float")
   end
   state = {}
 end

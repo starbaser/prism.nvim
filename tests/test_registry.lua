@@ -176,6 +176,20 @@ T["registry"]["group nudge skips around pre-registered colors"] = function()
   eq(reg.nudged_bg, 0x000002)
 end
 
+T["registry"]["nudge does not carry across RGB channel boundaries"] = function()
+  vim.api.nvim_set_hl(0, "PrismCyanEdge", { bg = 0x00ffff })
+  vim.api.nvim_set_hl(0, "PrismBlueEdge", { bg = 0x0000ff })
+  vim.api.nvim_set_hl(0, "PrismWhiteEdge", { bg = 0xffffff })
+
+  local cyan = registry.register("PrismCyanEdge", 0.5)
+  local blue = registry.register("PrismBlueEdge", 0.5)
+  local white = registry.register("PrismWhiteEdge", 0.5)
+
+  eq(cyan.nudged_bg, 0x00fffe)
+  eq(blue.nudged_bg, 0x0000fd)
+  eq(white.nudged_bg, 0xfffffc)
+end
+
 T["registry"]["rebuild_color_index maps bg -> group names"] = function()
   vim.api.nvim_set_hl(0, "PrismIdxA", { bg = 0xdeadbe })
   vim.api.nvim_set_hl(0, "PrismIdxB", { bg = 0xdeadbe })

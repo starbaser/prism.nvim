@@ -51,7 +51,7 @@ T["lualine"]["renders a named slot with its highlight group"] = function()
       [1] = reg("PrismLineA", 0x123456),
     },
   })
-  eq(got:find("%#PrismLineA#󰜌", 1, true) ~= nil, true)
+  eq(got:find("%#PrismLineA#󰜌 ", 1, true) ~= nil, true)
   eq(count_plain(got, "󰜌"), 1)
   eq(count_plain(got, "·"), 6)
 end
@@ -62,7 +62,7 @@ T["lualine"]["renders color-only slots with deterministic color highlights"] = f
       [1] = reg(nil, 0xabc123),
     },
   })
-  eq(got:find("%#PrismSlotColor_abc123#󰜌", 1, true) ~= nil, true)
+  eq(got:find("%#PrismSlotColor_abc123#󰜌 ", 1, true) ~= nil, true)
   local hl = vim.api.nvim_get_hl(0, { name = "PrismSlotColor_abc123", link = false })
   eq(hl.fg, 0xabc123)
 end
@@ -78,6 +78,19 @@ T["lualine"]["uses configured icons and separators"] = function()
     },
   })
   eq(got:find("%#PrismLineA#X|%#PrismSlotEmpty#-", 1, true) ~= nil, true)
+end
+
+T["lualine"]["caps overflow slot state at seven rendered positions"] = function()
+  local state = { slots = {} }
+  for i = 1, 20 do
+    local name = "PrismLineOverflow" .. i
+    vim.api.nvim_set_hl(0, name, { fg = 0x100000 + i })
+    state.slots[i] = reg(name, 0x100000 + i)
+  end
+
+  local got = renderer.render({}, state)
+  eq(count_plain(got, "󰜌"), 7)
+  eq(got:find("PrismLineOverflow8", 1, true), nil)
 end
 
 return T

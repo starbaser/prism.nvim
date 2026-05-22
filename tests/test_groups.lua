@@ -35,6 +35,17 @@ local function open_with_two_groups()
   return groups.open()
 end
 
+local function prism_group_windows()
+  local wins = {}
+  for _, win in ipairs(vim.api.nvim_list_wins()) do
+    local buf = vim.api.nvim_win_get_buf(win)
+    if vim.bo[buf].filetype == "prism-groups" then
+      wins[#wins + 1] = win
+    end
+  end
+  return wins
+end
+
 T["groups"]["renders registered group names in priority order"] = function()
   local win = open_with_two_groups()
   local buf = vim.api.nvim_win_get_buf(win)
@@ -47,6 +58,11 @@ end
 T["groups"]["sizes width to the longest registered group name"] = function()
   local win = open_with_two_groups()
   eq(vim.api.nvim_win_get_width(win), vim.fn.strdisplaywidth("PrismFloatLonger"))
+end
+
+T["groups"]["opens with wrapping disabled"] = function()
+  local win = open_with_two_groups()
+  eq(vim.wo[win].wrap, false)
 end
 
 T["groups"]["highlights each line with the matching group"] = function()
@@ -63,6 +79,19 @@ T["groups"]["refresh resizes after a longer group is registered"] = function()
   registry.register("PrismFloatLongestName", 0.5)
   groups.refresh()
   eq(vim.api.nvim_win_get_width(win), vim.fn.strdisplaywidth("PrismFloatLongestName"))
+end
+
+T["groups"]["open sweeps stale floats from a reloaded module"] = function()
+  open_with_two_groups()
+  eq(#prism_group_windows(), 1)
+
+  package.loaded["prism.ui.groups"] = nil
+  groups = require("prism.ui.groups")
+  groups.open()
+  eq(#prism_group_windows(), 1)
+
+  groups.close()
+  eq(#prism_group_windows(), 0)
 end
 
 return T

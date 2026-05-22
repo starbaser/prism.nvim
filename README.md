@@ -1,9 +1,11 @@
 # `prism.nvim` 💠
 
-Compute optimal chroma-key for Neovim using kitty’s color stack protoclol
+Compute optimal iridescence.
 
-Implements OSC 30001 (push), OSC 30101 (pop), and OSC 21 color query/set per the
-[kitty color-stack protocol][kitty-protocol].
+Multi-faceted uncapped highlight group Chroma-keying for Neovim using
+[kitty’s graphic protocol’s color stack][kitty-protocol].
+
+![prism.nvim demo](https://raw.githubusercontent.com/starbaser/prism.nvim/main/demo.gif)
 
 [kitty-protocol]: https://sw.kovidgoyal.net/kitty/color-stack/
 
@@ -27,3 +29,5 @@ Implements OSC 30001 (push), OSC 30101 (pop), and OSC 21 color query/set per the
 direnv allow
 just lua-test
 ```
+
+Under construction …

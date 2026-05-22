@@ -75,3 +75,15 @@ end, { desc = "prism: print scan/reconcile timing stats" })
 vim.api.nvim_create_user_command("PrismStatsReset", function()
   require("prism").reset_stats()
 end, { desc = "prism: clear accumulated timing stats" })
+
+vim.api.nvim_create_user_command("PrismGroups", function(cmd)
+  local groups = require("prism.ui.groups")
+  if cmd.bang then
+    groups.close()
+  else
+    groups.toggle()
+  end
+end, {
+  bang = true,
+  desc = "prism: toggle registered highlight group float",
+})

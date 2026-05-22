@@ -4,6 +4,7 @@
 local events = require("prism.events")
 local log = require("prism.logging")
 local registry = require("prism.registry")
+local signals = require("prism.signals")
 local slots = require("prism.slots")
 local stats = require("prism.stats")
 local terminal = require("prism.terminal")
@@ -52,6 +53,7 @@ function M.setup(opts)
   end
 
   terminal.push()
+  local registration_count = #registry.all()
   -- Colors first so groups nudge around any raw value collisions.
   for _, c in ipairs(defaults.colors) do
     registry.register_color(c.color, c.opacity)
@@ -63,15 +65,20 @@ function M.setup(opts)
   events.attach(defaults)
   events.schedule_refresh()
   active = true
+  if #registry.all() ~= registration_count then
+    signals.emit(signals.REGISTRY_CHANGED)
+  end
 end
 
 ---@param name string
 ---@param opacity number
 function M.register(name, opacity)
+  local before = registry.get(name)
   local reg = registry.register(name, opacity)
-  if reg then
+  if reg and reg ~= before then
     registry.rebuild_color_index()
     events.schedule_refresh()
+    signals.emit(signals.REGISTRY_CHANGED)
   end
   return reg
 end
@@ -79,16 +86,24 @@ end
 ---@param color integer|string
 ---@param opacity number
 function M.register_color(color, opacity)
+  local registration_count = #registry.all()
   local reg = registry.register_color(color, opacity)
-  if reg then events.schedule_refresh() end
+  if reg and #registry.all() ~= registration_count then
+    events.schedule_refresh()
+    signals.emit(signals.REGISTRY_CHANGED)
+  end
   return reg
 end
 
 ---@param key string|integer
 function M.unregister(key)
+  local registration_count = #registry.all()
   registry.unregister(key)
-  registry.rebuild_color_index()
-  events.schedule_refresh()
+  if #registry.all() ~= registration_count then
+    registry.rebuild_color_index()
+    events.schedule_refresh()
+    signals.emit(signals.REGISTRY_CHANGED)
+  end
 end
 
 function M.refresh()

@@ -76,6 +76,27 @@ T["registry"]["double registration is a no-op"] = function()
   eq(registry.get("PrismTestA").opacity, 0.4)
 end
 
+T["registry"]["register rejects missing opacity"] = function()
+  ---@diagnostic disable-next-line: missing-parameter
+  local reg = registry.register("PrismTestA")
+  eq(reg, nil)
+  eq(#registry.all(), 0)
+end
+
+T["registry"]["register rejects non-number opacity"] = function()
+  ---@diagnostic disable-next-line: param-type-mismatch
+  local reg = registry.register("PrismTestA", "0.5")
+  eq(reg, nil)
+  eq(#registry.all(), 0)
+end
+
+T["registry"]["register_color rejects missing opacity"] = function()
+  ---@diagnostic disable-next-line: missing-parameter
+  local reg = registry.register_color(0xabc123)
+  eq(reg, nil)
+  eq(#registry.all(), 0)
+end
+
 T["registry"]["unregister restores original bg"] = function()
   registry.register("PrismTestA", 0.5)
   registry.unregister("PrismTestA")

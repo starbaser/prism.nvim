@@ -37,6 +37,17 @@ local function reg(name, idx, nudged_bg, opacity)
            original_bg = nudged_bg - 1 }
 end
 
+local function slot_event_counter()
+  local count = 0
+  local group = vim.api.nvim_create_augroup("prism_test_slot_events", { clear = true })
+  vim.api.nvim_create_autocmd("User", {
+    group = group,
+    pattern = "PrismSlotsChanged",
+    callback = function() count = count + 1 end,
+  })
+  return function() return count end
+end
+
 T["slots"]["empty desired with empty current does nothing"] = function()
   slots.reconcile({})
   eq(set_spy.call_count, 0)
@@ -59,6 +70,21 @@ T["slots"]["reconcile returns 0 when nothing changes"] = function()
   slots.reconcile({ r1 })
   local emitted = slots.reconcile({ r1 })
   eq(emitted, 0)
+end
+
+T["slots"]["emits a slot change event when reconciliation mutates state"] = function()
+  local count = slot_event_counter()
+  local r1 = reg("A", 1, 0x111111, 0.5)
+  slots.reconcile({ r1 })
+  eq(count(), 1)
+end
+
+T["slots"]["does not emit a slot change event for no-op reconciliation"] = function()
+  local r1 = reg("A", 1, 0x111111, 0.5)
+  slots.reconcile({ r1 })
+  local count = slot_event_counter()
+  slots.reconcile({ r1 })
+  eq(count(), 0)
 end
 
 T["slots"]["unchanged slot is not re-emitted"] = function()
@@ -98,6 +124,79 @@ T["slots"]["caps at MAX_SLOTS"] = function()
   eq(clear_spy.call_count, 0)
 end
 
+T["slots"]["keeps visible registrations in their existing slots"] = function()
+  local many = {}
+  for i = 1, 8 do
+    many[i] = reg("R" .. i, i, 0x100000 + i, 0.5)
+  end
+  slots.reconcile(many)
+
+  set_spy.calls, set_spy.call_count = {}, 0
+  clear_spy.calls, clear_spy.call_count = {}, 0
+  slots.reconcile({
+    many[2], many[3], many[4], many[5],
+    many[6], many[7], many[8],
+  })
+
+  eq(set_spy.call_count, 1)
+  eq(clear_spy.call_count, 0)
+  eq(set_spy.calls[1], { 1, many[8].nudged_bg, many[8].opacity })
+  local snap = slots.snapshot()
+  eq(snap[1], many[8])
+  eq(snap[2], many[2])
+  eq(snap[7], many[7])
+end
+
+T["slots"]["does not evict visible occupants when a higher priority registration returns"] = function()
+  local many = {}
+  for i = 1, 8 do
+    many[i] = reg("R" .. i, i, 0x100000 + i, 0.5)
+  end
+  slots.reconcile(many)
+  slots.reconcile({
+    many[2], many[3], many[4], many[5],
+    many[6], many[7], many[8],
+  })
+
+  set_spy.calls, set_spy.call_count = {}, 0
+  clear_spy.calls, clear_spy.call_count = {}, 0
+  slots.reconcile(many)
+
+  eq(set_spy.call_count, 0)
+  eq(clear_spy.call_count, 0)
+  local snap = slots.snapshot()
+  eq(snap[1], many[8])
+  eq(snap[2], many[2])
+  eq(snap[7], many[7])
+end
+
+T["slots"]["fills freed slots by priority"] = function()
+  local many = {}
+  for i = 1, 8 do
+    many[i] = reg("R" .. i, i, 0x100000 + i, 0.5)
+  end
+  slots.reconcile(many)
+  slots.reconcile({
+    many[2], many[3], many[4], many[5],
+    many[6], many[7], many[8],
+  })
+
+  set_spy.calls, set_spy.call_count = {}, 0
+  clear_spy.calls, clear_spy.call_count = {}, 0
+  slots.reconcile({
+    many[1], many[3], many[4], many[5],
+    many[6], many[7], many[8],
+  })
+
+  eq(set_spy.call_count, 1)
+  eq(clear_spy.call_count, 0)
+  eq(set_spy.calls[1], { 2, many[1].nudged_bg, many[1].opacity })
+  local snap = slots.snapshot()
+  eq(snap[1], many[8])
+  eq(snap[2], many[1])
+  eq(snap[3], many[3])
+end
+
 T["slots"]["snapshot reflects current occupancy"] = function()
   local r1 = reg("A", 1, 0x111111, 0.5)
   slots.reconcile({ r1 })
@@ -116,6 +215,15 @@ T["slots"]["clear_all empties everything"] = function()
   clear_spy.calls, clear_spy.call_count = {}, 0
   slots.clear_all()
   eq(clear_spy.call_count, 2)
+end
+
+T["slots"]["clear_all emits one slot change event when it clears slots"] = function()
+  local r1 = reg("A", 1, 0x111111, 0.5)
+  local r2 = reg("B", 2, 0x222222, 0.4)
+  slots.reconcile({ r1, r2 })
+  local count = slot_event_counter()
+  slots.clear_all()
+  eq(count(), 1)
 end
 
 return T

@@ -91,6 +91,13 @@ end
 ---@param opacity number
 ---@return prism.Registration?
 function M.register(name, opacity)
+  if type(opacity) ~= "number" then
+    log.warn(string.format(
+      "prism: %s: opacity must be a number, got %s; skipping",
+      tostring(name), type(opacity)
+    ))
+    return nil
+  end
   if by_name[name] then
     log.warn(string.format("prism: %s already registered; skipping", name))
     return by_name[name]
@@ -131,6 +138,13 @@ end
 ---@param opacity number
 ---@return prism.Registration?
 function M.register_color(color, opacity)
+  if type(opacity) ~= "number" then
+    log.warn(string.format(
+      "prism: color %s: opacity must be a number, got %s; skipping",
+      tostring(color), type(opacity)
+    ))
+    return nil
+  end
   local rgb = parse_color(color)
   if not rgb then
     log.warn(string.format("prism: invalid color %s; skipping", tostring(color)))

@@ -1,6 +1,5 @@
 # `prism.nvim` 💠
 
-Compute-optimal iridescence.
 Multi-faceted highlight group chroma keying for Neovim Neovim using
 [kitty’s graphic protocol’s color stack][kitty-protocol].
 

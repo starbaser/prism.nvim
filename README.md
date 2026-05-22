@@ -1,6 +1,6 @@
 # `prism.nvim` 💠
 
-Multi-faceted highlight group chroma keying for Neovim Neovim using
+Multi-faceted highlight group chroma keying for Neovim using
 [kitty’s graphic protocol’s color stack][kitty-protocol].
 
 ![prism.nvim demo](https://raw.githubusercontent.com/starbaser/prism.nvim/main/demo.gif)

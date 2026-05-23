@@ -24,12 +24,20 @@ local M = {}
 ---@field groups       prism.GroupSpec[]
 ---@field colors       prism.ColorSpec[]
 ---@field debounce_ms  integer
+---@field max_refresh_hz integer
+---@field burst_window_ms integer
+---@field burst_event_threshold integer
+---@field burst_quiet_ms integer
 
 ---@type prism.Opts
 local defaults = {
   groups = {},
   colors = {},
   debounce_ms = 50,
+  max_refresh_hz = 20,
+  burst_window_ms = 100,
+  burst_event_threshold = 8,
+  burst_quiet_ms = 150,
 }
 
 local active = false
@@ -63,7 +71,7 @@ function M.setup(opts)
   end
   registry.rebuild_color_index()
   events.attach(defaults)
-  events.schedule_refresh()
+  events.force_refresh()
   active = true
   if #registry.all() ~= registration_count then
     signals.emit(signals.REGISTRY_CHANGED)
@@ -77,7 +85,7 @@ function M.register(name, opacity)
   local reg = registry.register(name, opacity)
   if reg and reg ~= before then
     registry.rebuild_color_index()
-    events.schedule_refresh()
+    events.force_refresh()
     signals.emit(signals.REGISTRY_CHANGED)
   end
   return reg
@@ -89,7 +97,8 @@ function M.register_color(color, opacity)
   local registration_count = #registry.all()
   local reg = registry.register_color(color, opacity)
   if reg and #registry.all() ~= registration_count then
-    events.schedule_refresh()
+    registry.rebuild_color_index()
+    events.force_refresh()
     signals.emit(signals.REGISTRY_CHANGED)
   end
   return reg
@@ -101,14 +110,14 @@ function M.unregister(key)
   registry.unregister(key)
   if #registry.all() ~= registration_count then
     registry.rebuild_color_index()
-    events.schedule_refresh()
+    events.force_refresh()
     signals.emit(signals.REGISTRY_CHANGED)
   end
 end
 
 function M.refresh()
   registry.rebuild_color_index()
-  events.schedule_refresh()
+  events.force_refresh()
 end
 
 ---@nodiscard

@@ -113,6 +113,45 @@ T["scanner"]["winhighlight translates a TS/extmark-reported group"] = function()
   vim.api.nvim_set_option_value("winhighlight", "", { win = cur })
 end
 
+T["scanner"]["targeted scan filters unrelated extmarks"] = function()
+  local buf = setup_window({ "hello" })
+  local ns = vim.api.nvim_create_namespace("prism_test_target_filter")
+  vim.api.nvim_buf_set_extmark(buf, ns, 0, 0, {
+    end_row = 0, end_col = 5, hl_group = "PrismScanAlpha",
+  })
+  local seen = scanner.collect_visible({ PrismScanBeta = true })
+  eq(seen["PrismScanAlpha"], nil)
+  eq(seen["PrismScanBeta"], nil)
+end
+
+T["scanner"]["targeted scan finds winhighlight destination"] = function()
+  local buf = setup_window({ "hello" })
+  local ns = vim.api.nvim_create_namespace("prism_test_target_wh")
+  vim.api.nvim_buf_set_extmark(buf, ns, 0, 0, {
+    end_row = 0, end_col = 5, hl_group = "PrismScanAlpha",
+  })
+  local cur = vim.api.nvim_get_current_win()
+  vim.api.nvim_set_option_value("winhighlight", "PrismScanAlpha:PrismScanGamma", { win = cur })
+  local seen = scanner.collect_visible({ PrismScanGamma = true })
+  eq(seen["PrismScanGamma"], true)
+  eq(seen["PrismScanAlpha"], nil)
+  vim.api.nvim_set_option_value("winhighlight", "", { win = cur })
+end
+
+T["scanner"]["state-only targeted scan ignores buffer content groups"] = function()
+  local buf = setup_window({ "hello" })
+  local ns = vim.api.nvim_create_namespace("prism_test_state_only")
+  vim.api.nvim_buf_set_extmark(buf, ns, 0, 0, {
+    end_row = 0, end_col = 5, hl_group = "PrismScanAlpha",
+  })
+  local cur = vim.api.nvim_get_current_win()
+  vim.wo[cur].cursorline = true
+  local seen = scanner.collect_visible({ CursorLine = true })
+  eq(seen["CursorLine"], true)
+  eq(seen["PrismScanAlpha"], nil)
+  vim.wo[cur].cursorline = false
+end
+
 T["scanner"]["tier-3 cursorline is gated on registration"] = function()
   setup_window({ "hello" })
   local cur = vim.api.nvim_get_current_win()

@@ -73,6 +73,14 @@ vim.api.nvim_create_user_command("PrismStats", function()
       s.last_visible_count,
       s.last_desired_count
     ),
+    string.format(
+      "  events=%d  merged=%d  capped=%d  bursts=%d  burst_active=%s",
+      s.events,
+      s.merged_events,
+      s.capped_refreshes,
+      s.burst_entries,
+      tostring(s.burst_active)
+    ),
   }
   vim.api.nvim_echo(
     vim.tbl_map(function(l)

@@ -294,6 +294,26 @@ function M.registered_names()
   return out
 end
 
+--- Names worth searching for during visibility scans. Direct group
+--- registrations are included as-is; color-only registrations contribute the
+--- currently-defined groups whose bg equals that raw color.
+---@nodiscard
+---@return table<string, true>
+function M.visibility_targets()
+  local out = M.registered_names()
+  for _, r in ipairs(registrations) do
+    if r.color_only then
+      local groups = color_index[r.nudged_bg]
+      if groups then
+        for _, name in ipairs(groups) do
+          out[name] = true
+        end
+      end
+    end
+  end
+  return out
+end
+
 ---@param name string
 ---@return prism.Registration?
 function M.get(name)
@@ -313,8 +333,9 @@ end
 --- Order is preserved from registration order; the slot reconciler caps the
 --- result at the slot count.
 ---@param visible_names table<string, true>
+---@param limit? integer
 ---@return prism.Registration[]
-function M.filter_visible(visible_names)
+function M.filter_visible(visible_names, limit)
   local out = {}
   for _, r in ipairs(registrations) do
     local is_visible
@@ -334,6 +355,9 @@ function M.filter_visible(visible_names)
     end
     if is_visible then
       out[#out + 1] = r
+      if limit and #out >= limit then
+        break
+      end
     end
   end
   return out

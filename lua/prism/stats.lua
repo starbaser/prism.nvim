@@ -23,6 +23,11 @@ local reconcile = new_bucket()
 local emissions = 0
 local last_visible_count = 0
 local last_desired_count = 0
+local events = 0
+local merged_events = 0
+local capped_refreshes = 0
+local burst_entries = 0
+local burst_active = false
 
 ---@param bucket prism.stats.Bucket
 ---@param ns integer
@@ -50,6 +55,25 @@ function M.record_reconcile(ns, desired_count, emit_count)
   last_desired_count = desired_count
 end
 
+---@param merged boolean
+function M.record_event(merged)
+  events = events + 1
+  if merged then merged_events = merged_events + 1 end
+end
+
+function M.record_capped_refresh()
+  capped_refreshes = capped_refreshes + 1
+end
+
+function M.record_burst_enter()
+  burst_entries = burst_entries + 1
+  burst_active = true
+end
+
+function M.record_burst_exit()
+  burst_active = false
+end
+
 ---@param b prism.stats.Bucket
 local function as_us(b)
   return {
@@ -67,6 +91,11 @@ end
 ---@field emissions          integer  total set_slot + clear_slot calls since reset
 ---@field last_visible_count integer
 ---@field last_desired_count integer
+---@field events             integer
+---@field merged_events      integer
+---@field capped_refreshes   integer
+---@field burst_entries      integer
+---@field burst_active       boolean
 
 ---@nodiscard
 ---@return prism.stats.Snapshot
@@ -77,6 +106,11 @@ function M.snapshot()
     emissions = emissions,
     last_visible_count = last_visible_count,
     last_desired_count = last_desired_count,
+    events = events,
+    merged_events = merged_events,
+    capped_refreshes = capped_refreshes,
+    burst_entries = burst_entries,
+    burst_active = burst_active,
   }
 end
 
@@ -86,6 +120,11 @@ function M.reset()
   emissions = 0
   last_visible_count = 0
   last_desired_count = 0
+  events = 0
+  merged_events = 0
+  capped_refreshes = 0
+  burst_entries = 0
+  burst_active = false
 end
 
 return M

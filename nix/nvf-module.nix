@@ -58,6 +58,10 @@
     groups = cfg.groups;
     colors = cfg.colors;
     debounce_ms = cfg.debounceMs;
+    max_refresh_hz = cfg.maxRefreshHz;
+    burst_window_ms = cfg.burstWindowMs;
+    burst_event_threshold = cfg.burstEventThreshold;
+    burst_quiet_ms = cfg.burstQuietMs;
   };
 in {
   options.vim.prism = {
@@ -100,6 +104,30 @@ in {
         Lower = more reactive but more work; higher = smoother under
         rapid event bursts (typing, scrolling).
       '';
+    };
+
+    maxRefreshHz = mkOption {
+      type = types.int;
+      default = 20;
+      description = "Maximum Prism visibility refresh rate during sustained event bursts.";
+    };
+
+    burstWindowMs = mkOption {
+      type = types.int;
+      default = 100;
+      description = "Time window used to detect high-frequency Prism refresh events.";
+    };
+
+    burstEventThreshold = mkOption {
+      type = types.int;
+      default = 8;
+      description = "Number of refresh events within burstWindowMs before Prism enters capped burst mode.";
+    };
+
+    burstQuietMs = mkOption {
+      type = types.int;
+      default = 150;
+      description = "Quiet period after a burst before Prism runs its final trailing refresh.";
     };
 
     extraSetup = mkOption {

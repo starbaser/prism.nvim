@@ -201,6 +201,32 @@ T["registry"]["rebuild_color_index maps bg -> group names"] = function()
   eq(got[1].color_only, true)
 end
 
+T["registry"]["visibility_targets includes registered groups and color matches"] = function()
+  vim.api.nvim_set_hl(0, "PrismIdxA", { bg = 0xdeadbe })
+  vim.api.nvim_set_hl(0, "PrismIdxB", { bg = 0xdeadbe })
+  registry.register("PrismTestA", 0.4)
+  registry.register_color(0xdeadbe, 0.5)
+  registry.rebuild_color_index()
+
+  local targets = registry.visibility_targets()
+  eq(targets.PrismTestA, true)
+  eq(targets.PrismIdxA, true)
+  eq(targets.PrismIdxB, true)
+end
+
+T["registry"]["filter_visible can cap at slot count"] = function()
+  for i = 1, 9 do
+    local name = "PrismCap" .. i
+    vim.api.nvim_set_hl(0, name, { bg = 0x100000 + i })
+    registry.register(name, 0.5)
+  end
+  local visible = {}
+  for _, r in ipairs(registry.all()) do
+    visible[r.name] = true
+  end
+  eq(#registry.filter_visible(visible, 7), 7)
+end
+
 T["registry"]["filter_visible excludes color with no matching group visible"] = function()
   vim.api.nvim_set_hl(0, "PrismIdxC", { bg = 0xbeefca })
   registry.register_color(0xbeefca, 0.5)

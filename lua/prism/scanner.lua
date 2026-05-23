@@ -36,6 +36,50 @@ local M = {}
 
 -- hl-name link resolution cache; invalidated on ColorScheme.
 local hl_link_cache = {} ---@type table<string, string>
+local syntax_cache = {} ---@type table<integer, { changedtick: integer, rows: table<integer, table<string, true>> }>
+
+local RENDER_GROUPS = {
+  ColorColumn = true,
+  CursorColumn = true,
+  CursorLine = true,
+  CursorLineFold = true,
+  CursorLineNr = true,
+  CursorLineSign = true,
+  CurSearch = true,
+  FloatBorder = true,
+  FloatFooter = true,
+  FloatTitle = true,
+  FoldColumn = true,
+  IncSearch = true,
+  LineNr = true,
+  LineNrAbove = true,
+  LineNrBelow = true,
+  Normal = true,
+  NormalFloat = true,
+  NormalNC = true,
+  Pmenu = true,
+  PmenuExtra = true,
+  PmenuExtraSel = true,
+  PmenuKind = true,
+  PmenuKindSel = true,
+  PmenuMatch = true,
+  PmenuMatchSel = true,
+  PmenuSbar = true,
+  PmenuSel = true,
+  PmenuThumb = true,
+  Search = true,
+  SignColumn = true,
+  StatusLine = true,
+  StatusLineNC = true,
+  TabLine = true,
+  TabLineFill = true,
+  TabLineSel = true,
+  TermCursor = true,
+  TermCursorNC = true,
+  Terminal = true,
+  Visual = true,
+  VisualNOS = true,
+}
 
 ---@param name string
 ---@return string
@@ -72,12 +116,83 @@ local function parse_winhighlight(win)
   return map
 end
 
+---@param targets table<string, true>?
+---@param name string
+---@return boolean
+local function wants(targets, name)
+  return targets == nil or targets[name] == true
+end
+
+---@param out table<string, true>
+---@param targets table<string, true>?
+---@param name string
+local function add_seen(out, targets, name)
+  if wants(targets, name) then out[name] = true end
+end
+
+---@param targets table<string, true>?
+---@param wh table<string, string>
+---@return table<string, true>?
+local function source_targets(targets, wh)
+  if targets == nil then return nil end
+  local out = {}
+  for name in pairs(targets) do
+    out[name] = true
+  end
+  for src, dst in pairs(wh) do
+    if targets[dst] then out[src] = true end
+  end
+  return out
+end
+
+---@param targets table<string, true>?
+---@return boolean
+local function needs_content_scan(targets)
+  if targets == nil then return true end
+  for name in pairs(targets) do
+    if not RENDER_GROUPS[name] then return true end
+  end
+  return false
+end
+
+---@param buf integer
+---@param row1 integer
+---@return table<string, true>
+local function syntax_row_groups(buf, row1)
+  local changedtick = vim.b[buf].changedtick
+  local cache = syntax_cache[buf]
+  if not cache or cache.changedtick ~= changedtick then
+    cache = { changedtick = changedtick, rows = {} }
+    syntax_cache[buf] = cache
+  end
+
+  local cached = cache.rows[row1]
+  if cached then return cached end
+
+  local groups = {}
+  local sample_cols = { 1, 20, 40, 60 }
+  for _, col in ipairs(sample_cols) do
+    local stack = vim.fn.synstack(row1, col)
+    if stack then
+      for _, sid in ipairs(stack) do
+        local nm = vim.fn.synIDattr(vim.fn.synIDtrans(sid), "name")
+        if nm and nm ~= "" then groups[nm] = true end
+      end
+    end
+  end
+  cache.rows[row1] = groups
+  return groups
+end
+
 --- Tier 1: buffer-content scan over [top0, bot0] into `raw`.
 ---@param buf integer
 ---@param top0 integer
 ---@param bot0 integer
 ---@param raw table<string, true>
-local function scan_buffer(buf, top0, bot0, raw)
+---@param targets table<string, true>?
+local function scan_buffer(buf, top0, bot0, raw, targets)
+  if not needs_content_scan(targets) then return end
+
   local ok, marks = pcall(
     vim.api.nvim_buf_get_extmarks,
     buf, -1, { top0, 0 }, { bot0, -1 },
@@ -87,7 +202,7 @@ local function scan_buffer(buf, top0, bot0, raw)
     for _, m in ipairs(marks) do
       local details = m[4]
       if details and details.hl_group then
-        raw[details.hl_group] = true
+        if wants(targets, details.hl_group) then raw[details.hl_group] = true end
       end
     end
   end
@@ -103,7 +218,8 @@ local function scan_buffer(buf, top0, bot0, raw)
       for id in query:iter_captures(tstree:root(), buf, top0, bot0 + 1) do
         local capture_name = query.captures[id]
         if capture_name and not vim.startswith(capture_name, "_") then
-          raw[resolve_hl_link("@" .. capture_name .. "." .. lang)] = true
+          local name = resolve_hl_link("@" .. capture_name .. "." .. lang)
+          if wants(targets, name) then raw[name] = true end
         end
       end
     end)
@@ -114,16 +230,9 @@ local function scan_buffer(buf, top0, bot0, raw)
   -- often line-uniform but not always (e.g. a keyword followed by a string
   -- on the same line), so a handful of sample columns gives reasonable
   -- coverage without resurrecting the per-cell cost.
-  local sample_cols = { 1, 20, 40, 60 }
   for row1 = top0 + 1, bot0 + 1 do
-    for _, col in ipairs(sample_cols) do
-      local stack = vim.fn.synstack(row1, col)
-      if stack then
-        for _, sid in ipairs(stack) do
-          local nm = vim.fn.synIDattr(vim.fn.synIDtrans(sid), "name")
-          if nm and nm ~= "" then raw[nm] = true end
-        end
-      end
+    for nm in pairs(syntax_row_groups(buf, row1)) do
+      if wants(targets, nm) then raw[nm] = true end
     end
   end
 end
@@ -136,7 +245,7 @@ end
 ---@param registered table<string, true>
 local function augment_window_state(seen, win, is_current, registered)
   local function add_if(name)
-    if registered[name] then seen[name] = true end
+    if registered and registered[name] then seen[name] = true end
   end
 
   if vim.wo[win].cursorline then
@@ -189,7 +298,7 @@ end
 ---@param registered table<string, true>
 local function augment_global_state(seen, has_noncurrent, registered)
   local function add_if(name)
-    if registered[name] then seen[name] = true end
+    if registered and registered[name] then seen[name] = true end
   end
 
   if vim.o.laststatus > 0 then
@@ -234,7 +343,6 @@ end
 ---@nodiscard
 ---@return table<string, true>
 function M.collect_visible(registered)
-  registered = registered or {}
   local seen = {}
   local wins = vim.api.nvim_tabpage_list_wins(0)
   local current_win = vim.api.nvim_get_current_win()
@@ -251,17 +359,17 @@ function M.collect_visible(registered)
       local top1, bot1 = visible_lines(win)
       local top0, bot0 = top1 - 1, bot1 - 1
 
-      local raw = {}
-      scan_buffer(buf, top0, bot0, raw)
-
       local wh = parse_winhighlight(win)
+      local raw = {}
+      scan_buffer(buf, top0, bot0, raw, source_targets(registered, wh))
+
       for name in pairs(raw) do
-        seen[wh[name] or name] = true
+        add_seen(seen, registered, wh[name] or name)
       end
 
-      seen[wh["Normal"] or "Normal"] = true
+      add_seen(seen, registered, wh["Normal"] or "Normal")
       if not is_current then
-        seen[wh["NormalNC"] or "NormalNC"] = true
+        add_seen(seen, registered, wh["NormalNC"] or "NormalNC")
       end
 
       augment_window_state(seen, win, is_current, registered)
@@ -279,6 +387,7 @@ end
 --- ColorScheme — link chains may have been rewritten.
 function M.on_colorscheme()
   hl_link_cache = {}
+  syntax_cache = {}
 end
 
 return M

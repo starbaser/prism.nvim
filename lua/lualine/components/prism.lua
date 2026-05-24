@@ -52,15 +52,15 @@ local function attach_autocmds()
   })
 end
 
-local function toggle_groups()
-  pcall(vim.cmd, "PrismGroups")
+local function toggle_debug()
+  pcall(vim.cmd, "PrismDebug")
 end
 
 ---@param options table
 function M:init(options)
   options = vim.tbl_extend("keep", options or {}, component_defaults)
   if options.on_click == nil then
-    options.on_click = toggle_groups
+    options.on_click = toggle_debug
   end
 
   M.super.init(self, options)

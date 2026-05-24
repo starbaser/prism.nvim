@@ -79,9 +79,9 @@ in {
       description = ''
         Highlight groups to register, in priority order. Each becomes a
         candidate for one of kitty's seven transparent_background_color
-        slots when visible on screen. Group bg is nudged by registration
-        index so kitty's color-keyed transparency matcher has a unique key
-        per group.
+        slots when visible on screen. Group bg is nudged to a nearby unique
+        key per bg/opacity pair so kitty's color-keyed transparency matcher
+        can distinguish entries that require different opacity.
       '';
     };
 

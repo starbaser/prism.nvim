@@ -1,7 +1,8 @@
 --- prism.registry: priority-ordered registration with bg-color nudging.
 ---
 --- Two registration paths share the same priority list:
----   * groups[]: name-keyed; bg read from the live hl group, nudged by index
+---   * groups[]: name-keyed; bg read from the live hl group. Groups with
+---     the same bg and opacity share one nudged key; otherwise bg is nudged
 ---     to a unique 24-bit key, then written back. Visibility is gated on the
 ---     group's name appearing in the scanner's visible_names set.
 ---   * colors[]: raw RGB; stored as-is (no nudge). Visibility is gated on
@@ -65,30 +66,50 @@ local function is_used_nudge(n)
   return false
 end
 
---- Compute a nudged bg unique within the current registration set.
---- The user-visible delta is at most a handful of LSBs of blue/green —
---- imperceptible, but distinct enough for kitty's exact-match keying.
 ---@param orig integer
----@param index integer
+---@param opacity number
+---@return integer?
+local function shared_nudge(orig, opacity)
+  for _, r in ipairs(registrations) do
+    if not r.color_only and r.original_bg == orig and r.opacity == opacity then
+      return r.nudged_bg
+    end
+  end
+  return nil
+end
+
+--- Compute a nudged bg unique within the current registration set.
+--- Prefer the smallest positive blue-channel delta so unrelated earlier
+--- registrations do not make later groups drift farther from their source bg.
+---@param orig integer
 ---@return integer
-function M._nudge(orig, index)
+function M._nudge(orig)
   local r, g, b = unpack_rgb(orig)
   local function available(n)
     return n and n ~= orig and not is_used_nudge(n)
   end
-  for offset = 0, 0xfe do
-    local step = ((index + offset - 1) % 0xff) + 1
+  for step = 1, 0xff do
     local n = pack_rgb(r, g, b + step)
     if available(n) then return n end
-    n = pack_rgb(r, g, b - step)
+  end
+  for step = 1, 0xff do
+    local n = pack_rgb(r, g, b - step)
     if available(n) then return n end
-    n = pack_rgb(r, g + step, b)
+  end
+  for step = 1, 0xff do
+    local n = pack_rgb(r, g + step, b)
     if available(n) then return n end
-    n = pack_rgb(r, g - step, b)
+  end
+  for step = 1, 0xff do
+    local n = pack_rgb(r, g - step, b)
     if available(n) then return n end
-    n = pack_rgb(r + step, g, b)
+  end
+  for step = 1, 0xff do
+    local n = pack_rgb(r + step, g, b)
     if available(n) then return n end
-    n = pack_rgb(r - step, g, b)
+  end
+  for step = 1, 0xff do
+    local n = pack_rgb(r - step, g, b)
     if available(n) then return n end
   end
   error(string.format("prism: exhausted RGB nudge space for #%06x", orig))
@@ -161,7 +182,7 @@ function M.register(name, opacity)
     nudged_bg = 0,
     color_only = false,
   }
-  reg.nudged_bg = M._nudge(original_bg, idx)
+  reg.nudged_bg = shared_nudge(original_bg, opacity) or M._nudge(original_bg)
   registrations[idx] = reg
   by_name[name] = reg
   apply_hl(reg)
@@ -337,6 +358,7 @@ end
 ---@return prism.Registration[]
 function M.filter_visible(visible_names, limit)
   local out = {}
+  local included_slots = {}
   for _, r in ipairs(registrations) do
     local is_visible
     if r.color_only then
@@ -353,8 +375,10 @@ function M.filter_visible(visible_names, limit)
     else
       is_visible = visible_names[r.name] == true
     end
-    if is_visible then
+    local slot_key = is_visible and string.format("%06x:%s", r.nudged_bg, r.opacity)
+    if is_visible and not included_slots[slot_key] then
       out[#out + 1] = r
+      included_slots[slot_key] = true
       if limit and #out >= limit then
         break
       end

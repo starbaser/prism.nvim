@@ -47,6 +47,14 @@ vim.api.nvim_create_user_command("PrismDisable", function()
   require("prism").disable()
 end, { desc = "prism: detach autocommands and restore kitty color stack" })
 
+vim.api.nvim_create_user_command("PrismEnable", function()
+  require("prism").enable()
+end, { desc = "prism: attach autocommands and push kitty color stack" })
+
+vim.api.nvim_create_user_command("PrismToggle", function()
+  require("prism").toggle()
+end, { desc = "prism: toggle kitty slot management" })
+
 vim.api.nvim_create_user_command("PrismStats", function()
   local s = require("prism").stats()
   local lines = {
@@ -95,14 +103,6 @@ vim.api.nvim_create_user_command("PrismStatsReset", function()
   require("prism").reset_stats()
 end, { desc = "prism: clear accumulated timing stats" })
 
-vim.api.nvim_create_user_command("PrismGroups", function(cmd)
-  local groups = require("prism.ui.groups")
-  if cmd.bang then
-    groups.close()
-  else
-    groups.toggle()
-  end
-end, {
-  bang = true,
-  desc = "prism: toggle registered highlight group float",
-})
+vim.api.nvim_create_user_command("PrismDebug", function()
+  require("prism.debug").toggle()
+end, { desc = "prism: toggle slot allocation and stats float" })

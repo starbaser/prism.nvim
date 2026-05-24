@@ -42,40 +42,83 @@ local defaults = {
 
 local active = false
 
+---@param color integer|string
+---@return boolean
+local function color_registered(color)
+  local rgb
+  if type(color) == "number" then
+    rgb = color
+  elseif type(color) == "string" then
+    rgb = tonumber(color:gsub("^#", ""), 16)
+  end
+  if not rgb then return false end
+
+  for _, reg in ipairs(registry.all()) do
+    if reg.color_only and reg.nudged_bg == rgb then
+      return true
+    end
+  end
+  return false
+end
+
 ---@nodiscard
 ---@return prism.Opts
 function M.get_defaults()
   return defaults
 end
 
----@param opts? prism.Opts
-function M.setup(opts)
-  defaults = vim.tbl_deep_extend("force", defaults, opts or {})
-
+---@return boolean
+local function can_enable()
   if not terminal.is_kitty() then
     log.warn(string.format(
       "prism: not running in kitty (TERM=%s); disabled",
       vim.env.TERM or ""
     ))
-    return
+    return false
   end
+  return true
+end
 
-  terminal.push()
-  local registration_count = #registry.all()
-  -- Colors first so groups nudge around any raw value collisions.
-  for _, c in ipairs(defaults.colors) do
-    registry.register_color(c.color, c.opacity)
-  end
-  for _, g in ipairs(defaults.groups) do
-    registry.register(g.name, g.opacity)
-  end
+local function refresh_active()
   registry.rebuild_color_index()
   events.attach(defaults)
   events.force_refresh()
+end
+
+local function activate()
+  terminal.push()
   active = true
+  refresh_active()
+  return true
+end
+
+---@param opts? prism.Opts
+function M.setup(opts)
+  defaults = vim.tbl_deep_extend("force", defaults, opts or {})
+  if not can_enable() then return false end
+
+  local registration_count = #registry.all()
+  -- Colors reserve raw slots before groups compute nudged keys.
+  for _, c in ipairs(defaults.colors) do
+    if not color_registered(c.color) then
+      registry.register_color(c.color, c.opacity)
+    end
+  end
+  for _, g in ipairs(defaults.groups) do
+    if not registry.get(g.name) then
+      registry.register(g.name, g.opacity)
+    end
+  end
+  registry.rebuild_color_index()
   if #registry.all() ~= registration_count then
     signals.emit(signals.REGISTRY_CHANGED)
   end
+
+  if active then
+    refresh_active()
+    return false
+  end
+  return activate()
 end
 
 ---@param name string
@@ -85,7 +128,7 @@ function M.register(name, opacity)
   local reg = registry.register(name, opacity)
   if reg and reg ~= before then
     registry.rebuild_color_index()
-    events.force_refresh()
+    if active then events.force_refresh() end
     signals.emit(signals.REGISTRY_CHANGED)
   end
   return reg
@@ -98,7 +141,7 @@ function M.register_color(color, opacity)
   local reg = registry.register_color(color, opacity)
   if reg and #registry.all() ~= registration_count then
     registry.rebuild_color_index()
-    events.force_refresh()
+    if active then events.force_refresh() end
     signals.emit(signals.REGISTRY_CHANGED)
   end
   return reg
@@ -110,14 +153,14 @@ function M.unregister(key)
   registry.unregister(key)
   if #registry.all() ~= registration_count then
     registry.rebuild_color_index()
-    events.force_refresh()
+    if active then events.force_refresh() end
     signals.emit(signals.REGISTRY_CHANGED)
   end
 end
 
 function M.refresh()
   registry.rebuild_color_index()
-  events.force_refresh()
+  if active then events.force_refresh() end
 end
 
 ---@nodiscard
@@ -131,11 +174,29 @@ function M.status()
 end
 
 function M.disable()
-  if not active then return end
+  if not active then return false end
   events.detach()
   slots.clear_all()
   terminal.pop()
   active = false
+  return true
+end
+
+function M.enable()
+  if active then
+    refresh_active()
+    return false
+  end
+  if not can_enable() then return false end
+
+  return activate()
+end
+
+function M.toggle()
+  if active then
+    return M.disable()
+  end
+  return M.enable()
 end
 
 ---@nodiscard

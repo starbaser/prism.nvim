@@ -38,10 +38,32 @@ T["registry"]["register applies a nudged bg"] = function()
   eq(hl.bg, 0x000001)
 end
 
-T["registry"]["two registrations on identical bg get distinct nudges"] = function()
+T["registry"]["two registrations on identical bg and opacity share a nudge"] = function()
   local r1 = registry.register("PrismTestA", 0.4)
   local r2 = registry.register("PrismTestB", 0.4)
-  eq(r1.nudged_bg ~= r2.nudged_bg, true)
+  eq(r1.nudged_bg, 0x000001)
+  eq(r2.nudged_bg, 0x000001)
+end
+
+T["registry"]["two registrations on identical bg and different opacity get distinct nudges"] = function()
+  local r1 = registry.register("PrismTestA", 0.4)
+  local r2 = registry.register("PrismTestB", 0.5)
+  eq(r1.nudged_bg, 0x000001)
+  eq(r2.nudged_bg, 0x000002)
+end
+
+T["registry"]["unrelated earlier registrations do not increase nudge distance"] = function()
+  vim.api.nvim_set_hl(0, "PrismFarA", { bg = 0x101010 })
+  vim.api.nvim_set_hl(0, "PrismFarB", { bg = 0x202020 })
+  vim.api.nvim_set_hl(0, "PrismFarC", { bg = 0x202020 })
+
+  local a = registry.register("PrismFarA", 0.4)
+  local b = registry.register("PrismFarB", 0.4)
+  local c = registry.register("PrismFarC", 0.4)
+
+  eq(a.nudged_bg, 0x101011)
+  eq(b.nudged_bg, 0x202021)
+  eq(c.nudged_bg, 0x202021)
 end
 
 T["registry"]["register preserves fg, bold, and other attrs"] = function()
@@ -56,7 +78,7 @@ T["registry"]["register falls back to Normal.bg when group has no bg"] = functio
   local reg = registry.register("PrismTestNoBg", 0.5)
   eq(reg ~= nil, true)
   eq(reg.original_bg, 0x808080) -- Normal.bg
-  eq(reg.nudged_bg, 0x808081)   -- Normal.bg + index 1
+  eq(reg.nudged_bg, 0x808081)   -- Normal.bg + 1
   -- And the group now has the nudged bg so its cells get keyed.
   local hl = vim.api.nvim_get_hl(0, { name = "PrismTestNoBg", link = false })
   eq(hl.bg, 0x808081)
@@ -137,6 +159,23 @@ T["registry"]["filter_visible preserves registration order"] = function()
   eq(got[2].name, "PrismTestC")
 end
 
+T["registry"]["filter_visible collapses shared color slots"] = function()
+  registry.register("PrismTestA", 0.4)
+  registry.register("PrismTestB", 0.4)
+  local got = registry.filter_visible({ PrismTestA = true, PrismTestB = true })
+  eq(#got, 1)
+  eq(got[1].name, "PrismTestA")
+end
+
+T["registry"]["filter_visible includes a shared slot when only a later group is visible"] = function()
+  registry.register("PrismTestA", 0.4)
+  registry.register("PrismTestB", 0.4)
+  local got = registry.filter_visible({ PrismTestB = true })
+  eq(#got, 1)
+  eq(got[1].name, "PrismTestB")
+  eq(got[1].nudged_bg, 0x000001)
+end
+
 T["registry"]["register_color stores raw value, no nudge, no hl mutation"] = function()
   local reg = registry.register_color(0xabc123, 0.5)
   eq(reg ~= nil, true)
@@ -186,8 +225,8 @@ T["registry"]["nudge does not carry across RGB channel boundaries"] = function()
   local white = registry.register("PrismWhiteEdge", 0.5)
 
   eq(cyan.nudged_bg, 0x00fffe)
-  eq(blue.nudged_bg, 0x0000fd)
-  eq(white.nudged_bg, 0xfffffc)
+  eq(blue.nudged_bg, 0x0000fe)
+  eq(white.nudged_bg, 0xfffffe)
 end
 
 T["registry"]["rebuild_color_index maps bg -> group names"] = function()

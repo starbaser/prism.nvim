@@ -2,7 +2,6 @@
 --- visible Neovim highlight groups.
 
 local events = require("prism.events")
-local log = require("prism.logging")
 local registry = require("prism.registry")
 local signals = require("prism.signals")
 local slots = require("prism.slots")
@@ -69,14 +68,7 @@ end
 
 ---@return boolean
 local function can_enable()
-  if not terminal.is_kitty() then
-    log.warn(string.format(
-      "prism: not running in kitty (TERM=%s); disabled",
-      vim.env.TERM or ""
-    ))
-    return false
-  end
-  return true
+  return terminal.is_kitty()
 end
 
 local function refresh_active()

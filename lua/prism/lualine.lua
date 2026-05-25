@@ -34,7 +34,7 @@ end
 ---@param text string
 ---@return string
 local function escape_status_text(text)
-  return text:gsub("%%", "%%%%")
+  return (text:gsub("%%", "%%%%"))
 end
 
 ---@param group string

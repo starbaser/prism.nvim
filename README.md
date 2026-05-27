@@ -19,7 +19,7 @@ background_opacity 0.9 # must be < 1.0
 background_blur 64 # Any value > 0
 ```
 
-> [!NOTE]
+> [!NOTE] `prism.nvim` is disabled when `$TERM` is not `xterm-kitty`
 
 ## Quickstart
 
@@ -156,8 +156,8 @@ The flake includes an `nvf` module at `nvfModules.default`.
 
 The module configures `vim.extraPlugins.prism` and schedules `require("prism").setup(...)` after nvf
 applies the colorscheme.
-It exposes `registrations`, refresh throttling options, and `extraSetup` for
-runtime-configuration in Lua.
+It exposes `registrations`, refresh throttling options, and `extraSetup` for runtime-configuration
+in Lua.
 
 The scheduled callback matters because Prism reads the live highlight background and writes a nearby
 color key back into the group before kitty can match it.

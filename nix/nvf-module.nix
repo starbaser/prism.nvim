@@ -6,12 +6,10 @@
 # Then configure:
 #   vim.prism = {
 #     enable = true;
-#     groups = [
-#       { name = "NormalFloat"; opacity = 0.9; }
-#       { name = "CursorLine";  opacity = 0.8; }
-#     ];
-#     colors = [
-#       { color = "#1c1b19"; opacity = 0.3; }
+#     registrations = [
+#       { target = "NormalFloat"; opacity = 0.9; priority = 20; }
+#       { target = "CursorLine";  opacity = 0.8; priority = 10; }
+#       { target = "#1c1b19"; opacity = 0.3; }
 #     ];
 #   };
 {prism-nvim}: {
@@ -24,39 +22,30 @@
 
   cfg = config.vim.prism;
 
-  groupSubmodule = types.submodule {
+  registrationSubmodule = types.submodule {
     options = {
-      name = mkOption {
-        type = types.str;
-        description = "Highlight group name to register.";
-      };
-      opacity = mkOption {
-        type = types.either types.float types.int;
-        description = "Opacity 0.0..1.0 (or -1 to use kitty's background_opacity).";
-      };
-    };
-  };
-
-  colorSubmodule = types.submodule {
-    options = {
-      color = mkOption {
+      target = mkOption {
         type = types.either types.str types.int;
         description = ''
-          24-bit RGB color: integer (0xRRGGBB) or string ("#RRGGBB").
-          Matched against the effective background of any cell — kitty
-          composites cells whose bg equals this value at the given opacity.
+          Highlight group name or raw 24-bit RGB color. Integer targets and
+          six-digit hex strings ("#RRGGBB" or "RRGGBB") are raw colors; all
+          other strings are highlight groups.
         '';
       };
       opacity = mkOption {
         type = types.either types.float types.int;
         description = "Opacity 0.0..1.0 (or -1 to use kitty's background_opacity).";
       };
+      priority = mkOption {
+        type = types.either types.float types.int;
+        default = 0;
+        description = "Registration priority. Higher values are selected first.";
+      };
     };
   };
 
   luaSpec = toLuaObject {
-    groups = cfg.groups;
-    colors = cfg.colors;
+    registrations = cfg.registrations;
     debounce_ms = cfg.debounceMs;
     max_refresh_hz = cfg.maxRefreshHz;
     burst_window_ms = cfg.burstWindowMs;
@@ -73,26 +62,13 @@ in {
       description = "The prism.nvim plugin package.";
     };
 
-    groups = mkOption {
-      type = types.listOf groupSubmodule;
+    registrations = mkOption {
+      type = types.listOf registrationSubmodule;
       default = [];
       description = ''
-        Highlight groups to register, in priority order. Each becomes a
-        candidate for one of kitty's seven transparent_background_color
-        slots when visible on screen. Group bg is nudged to a nearby unique
-        key per bg/opacity pair so kitty's color-keyed transparency matcher
-        can distinguish entries that require different opacity.
-      '';
-    };
-
-    colors = mkOption {
-      type = types.listOf colorSubmodule;
-      default = [];
-      description = ''
-        Raw 24-bit colors to register, in priority order. Used verbatim
-        as kitty slot keys — no nudge — so cells with the exact matching
-        bg get the configured opacity. Colors are registered before groups,
-        so group nudges step around any reserved raw value.
+        Prism targets to register. Highlight groups are nudged to nearby
+        color keys when they need distinct opacity entries; raw colors stay
+        exact. Higher priority registrations are selected first.
       '';
     };
 
@@ -135,7 +111,7 @@ in {
       default = "";
       description = ''
         Extra Lua executed immediately after `require('prism').setup(...)`.
-        Useful for dynamic registrations via prism.register / prism.register_color.
+        Useful for dynamic registrations via prism.register.
       '';
     };
   };

@@ -28,8 +28,11 @@ T["registry"] = new_set({
 T["registry"]["register applies a nudged bg"] = function()
   local reg = registry.register("PrismTestA", 0.5)
   eq(reg ~= nil, true)
-  eq(reg.name, "PrismTestA")
+  eq(reg.kind, "group")
+  eq(reg.target, "PrismTestA")
+  eq(reg.group, "PrismTestA")
   eq(reg.opacity, 0.5)
+  eq(reg.priority, 0)
   eq(reg.index, 1)
   eq(reg.original_bg, 0x000000)
   -- First registration: nudge to original + 1 = 0x000001
@@ -91,11 +94,27 @@ T["registry"]["register skips when Normal also has no bg"] = function()
   eq(#registry.all(), 0)
 end
 
-T["registry"]["double registration is a no-op"] = function()
-  registry.register("PrismTestA", 0.4)
-  registry.register("PrismTestA", 0.9)
+T["registry"]["repeated group registration updates in place"] = function()
+  local first = registry.register("PrismTestA", 0.4)
+  local second = registry.register("PrismTestA", 0.9)
+  eq(first, second)
   eq(#registry.all(), 1)
-  eq(registry.get("PrismTestA").opacity, 0.4)
+  eq(registry.get("PrismTestA").opacity, 0.9)
+  eq(registry.get("PrismTestA").original_bg, 0x000000)
+  eq(registry.get("PrismTestA").nudged_bg, 0x000001)
+end
+
+T["registry"]["priority update reorders without appending"] = function()
+  registry.register("PrismTestA", 0.4)
+  registry.register("PrismTestC", 0.5, 10)
+  eq(registry.all()[1].group, "PrismTestC")
+  eq(registry.all()[2].group, "PrismTestA")
+
+  registry.register("PrismTestA", 0.4, 20)
+  eq(#registry.all(), 2)
+  eq(registry.all()[1].group, "PrismTestA")
+  eq(registry.all()[1].priority, 20)
+  eq(registry.all()[2].group, "PrismTestC")
 end
 
 T["registry"]["register rejects missing opacity"] = function()
@@ -112,11 +131,49 @@ T["registry"]["register rejects non-number opacity"] = function()
   eq(#registry.all(), 0)
 end
 
-T["registry"]["register_color rejects missing opacity"] = function()
-  ---@diagnostic disable-next-line: missing-parameter
-  local reg = registry.register_color(0xabc123)
+T["registry"]["register rejects non-number priority"] = function()
+  ---@diagnostic disable-next-line: param-type-mismatch
+  local reg = registry.register("PrismTestA", 0.5, "high")
   eq(reg, nil)
   eq(#registry.all(), 0)
+end
+
+T["registry"]["register rejects invalid numeric color target"] = function()
+  eq(registry.register(-1, 0.5), nil)
+  eq(registry.register(0x1000000, 0.5), nil)
+  eq(#registry.all(), 0)
+end
+
+T["registry"]["register parses raw colors from numbers and hex strings"] = function()
+  local reg = registry.register("#abc123", 0.5)
+  eq(reg.kind, "color")
+  eq(reg.color, 0xabc123)
+  eq(reg.target, "#abc123")
+
+  local reg2 = registry.register("DEAD11", 0.5)
+  eq(reg2.kind, "color")
+  eq(reg2.color, 0xDEAD11)
+
+  local reg3 = registry.register(0x000001, 0.5)
+  eq(reg3.kind, "color")
+  eq(reg3.target, "#000001")
+end
+
+T["registry"]["non-hex strings are highlight group targets"] = function()
+  local reg = registry.register("PrismNotAColor", 0.5)
+  eq(reg.kind, "group")
+  eq(reg.group, "PrismNotAColor")
+  eq(reg.original_bg, 0x808080)
+end
+
+T["registry"]["repeated raw color registration updates in place"] = function()
+  local first = registry.register(0xabc123, 0.5)
+  local second = registry.register("#abc123", 0.3, 40)
+  eq(first, second)
+  eq(#registry.all(), 1)
+  eq(second.opacity, 0.3)
+  eq(second.priority, 40)
+  eq(second.nudged_bg, 0xabc123)
 end
 
 T["registry"]["unregister restores original bg"] = function()
@@ -129,8 +186,8 @@ T["registry"]["unregister restores original bg"] = function()
 end
 
 T["registry"]["unregister reindexes remaining"] = function()
-  registry.register("PrismTestA", 0.5)
-  registry.register("PrismTestC", 0.4)
+  registry.register("PrismTestA", 0.5, 20)
+  registry.register("PrismTestC", 0.4, 10)
   registry.unregister("PrismTestA")
   eq(#registry.all(), 1)
   eq(registry.get("PrismTestC").index, 1)
@@ -148,15 +205,16 @@ T["registry"]["on_colorscheme re-nudges after upstream reset"] = function()
   eq(registry.get("PrismTestA").nudged_bg, 0x123457)
 end
 
-T["registry"]["filter_visible preserves registration order"] = function()
+T["registry"]["filter_visible sorts by priority then first registration order"] = function()
   registry.register("PrismTestA", 0.4)
-  registry.register("PrismTestB", 0.4)
-  registry.register("PrismTestC", 0.4)
-  local visible = { PrismTestC = true, PrismTestA = true }
+  registry.register("PrismTestB", 0.5, 10)
+  registry.register("PrismTestC", 0.4, 10)
+  local visible = { PrismTestC = true, PrismTestA = true, PrismTestB = true }
   local got = registry.filter_visible(visible)
-  eq(#got, 2)
-  eq(got[1].name, "PrismTestA")
-  eq(got[2].name, "PrismTestC")
+  eq(#got, 3)
+  eq(got[1].group, "PrismTestB")
+  eq(got[2].group, "PrismTestC")
+  eq(got[3].group, "PrismTestA")
 end
 
 T["registry"]["filter_visible collapses shared color slots"] = function()
@@ -164,7 +222,7 @@ T["registry"]["filter_visible collapses shared color slots"] = function()
   registry.register("PrismTestB", 0.4)
   local got = registry.filter_visible({ PrismTestA = true, PrismTestB = true })
   eq(#got, 1)
-  eq(got[1].name, "PrismTestA")
+  eq(got[1].group, "PrismTestA")
 end
 
 T["registry"]["filter_visible includes a shared slot when only a later group is visible"] = function()
@@ -172,47 +230,50 @@ T["registry"]["filter_visible includes a shared slot when only a later group is 
   registry.register("PrismTestB", 0.4)
   local got = registry.filter_visible({ PrismTestB = true })
   eq(#got, 1)
-  eq(got[1].name, "PrismTestB")
+  eq(got[1].group, "PrismTestB")
   eq(got[1].nudged_bg, 0x000001)
 end
 
-T["registry"]["register_color stores raw value, no nudge, no hl mutation"] = function()
-  local reg = registry.register_color(0xabc123, 0.5)
+T["registry"]["raw color stores exact value with no hl mutation"] = function()
+  local before = vim.api.nvim_get_hl(0, { name = "PrismTestA", link = false }).bg
+  local reg = registry.register(0xabc123, 0.5)
   eq(reg ~= nil, true)
-  eq(reg.color_only, true)
-  eq(reg.name, nil)
+  eq(reg.kind, "color")
+  eq(reg.group, nil)
   eq(reg.original_bg, nil)
   eq(reg.nudged_bg, 0xabc123)
   eq(reg.opacity, 0.5)
+  eq(vim.api.nvim_get_hl(0, { name = "PrismTestA", link = false }).bg, before)
 end
 
-T["registry"]["register_color accepts hex string"] = function()
-  local reg = registry.register_color("#abc123", 0.5)
-  eq(reg.nudged_bg, 0xabc123)
-  local reg2 = registry.register_color("DEAD11", 0.5)
-  eq(reg2.nudged_bg, 0xDEAD11)
-end
-
-T["registry"]["register_color rejects invalid input"] = function()
-  eq(registry.register_color("not a color", 0.5), nil)
-  eq(registry.register_color(-1, 0.5), nil)
-  eq(registry.register_color(0x1000000, 0.5), nil)
-  eq(#registry.all(), 0)
-end
-
-T["registry"]["register_color rejects collision with existing"] = function()
-  registry.register_color(0xabc123, 0.5)
-  local reg = registry.register_color(0xabc123, 0.3)
-  eq(reg, nil)
-  eq(#registry.all(), 1)
-end
-
-T["registry"]["group nudge skips around pre-registered colors"] = function()
+T["registry"]["group nudge skips around pre-registered colors with different opacity"] = function()
   -- 0x000000 + 1 = 0x000001 would be the natural nudge for PrismTestA;
-  -- reserving that slot first should force PrismTestA to 0x000002.
-  registry.register_color(0x000001, 0.5)
+  -- reserving that slot at another opacity should force PrismTestA to 0x000002.
+  registry.register(0x000001, 0.5)
   local reg = registry.register("PrismTestA", 0.4)
   eq(reg.nudged_bg, 0x000002)
+end
+
+T["registry"]["group can share a pre-registered raw color with matching opacity"] = function()
+  registry.register(0x000001, 0.4)
+  local reg = registry.register("PrismTestA", 0.4)
+  eq(reg.nudged_bg, 0x000001)
+end
+
+T["registry"]["raw color update can force existing group nudge to move"] = function()
+  local group = registry.register("PrismTestA", 0.4)
+  eq(group.nudged_bg, 0x000001)
+
+  local raw = registry.register(0x000001, 0.5)
+  eq(raw.nudged_bg, 0x000001)
+  eq(group.nudged_bg, 0x000002)
+end
+
+T["registry"]["raw color update can share existing group nudge with matching opacity"] = function()
+  local group = registry.register("PrismTestA", 0.4)
+  local raw = registry.register(0x000001, 0.4)
+  eq(group.nudged_bg, 0x000001)
+  eq(raw.nudged_bg, 0x000001)
 end
 
 T["registry"]["nudge does not carry across RGB channel boundaries"] = function()
@@ -232,19 +293,19 @@ end
 T["registry"]["rebuild_color_index maps bg -> group names"] = function()
   vim.api.nvim_set_hl(0, "PrismIdxA", { bg = 0xdeadbe })
   vim.api.nvim_set_hl(0, "PrismIdxB", { bg = 0xdeadbe })
-  registry.register_color(0xdeadbe, 0.5)
+  registry.register(0xdeadbe, 0.5)
   registry.rebuild_color_index()
   -- Both groups match; visibility of either should slot the color.
   local got = registry.filter_visible({ PrismIdxA = true })
   eq(#got, 1)
-  eq(got[1].color_only, true)
+  eq(got[1].kind, "color")
 end
 
 T["registry"]["visibility_targets includes registered groups and color matches"] = function()
   vim.api.nvim_set_hl(0, "PrismIdxA", { bg = 0xdeadbe })
   vim.api.nvim_set_hl(0, "PrismIdxB", { bg = 0xdeadbe })
   registry.register("PrismTestA", 0.4)
-  registry.register_color(0xdeadbe, 0.5)
+  registry.register(0xdeadbe, 0.5)
   registry.rebuild_color_index()
 
   local targets = registry.visibility_targets()
@@ -261,31 +322,31 @@ T["registry"]["filter_visible can cap at slot count"] = function()
   end
   local visible = {}
   for _, r in ipairs(registry.all()) do
-    visible[r.name] = true
+    visible[r.group] = true
   end
   eq(#registry.filter_visible(visible, 7), 7)
 end
 
 T["registry"]["filter_visible excludes color with no matching group visible"] = function()
   vim.api.nvim_set_hl(0, "PrismIdxC", { bg = 0xbeefca })
-  registry.register_color(0xbeefca, 0.5)
+  registry.register(0xbeefca, 0.5)
   registry.rebuild_color_index()
   local got = registry.filter_visible({})
   eq(#got, 0)
 end
 
 T["registry"]["filter_visible excludes color with no group having that bg"] = function()
-  registry.register_color(0xffaa00, 0.5)
+  registry.register(0xffaa00, 0.5)
   registry.rebuild_color_index()
   local got = registry.filter_visible({ AnyOtherName = true })
   eq(#got, 0)
 end
 
-T["registry"]["filter_visible interleaves groups and colors by registration order"] = function()
+T["registry"]["filter_visible interleaves groups and colors by priority"] = function()
   vim.api.nvim_set_hl(0, "PrismMix", { bg = 0xc0ffee })
-  registry.register("PrismTestA", 0.4)       -- index 1, name-gated
-  registry.register_color(0xc0ffee, 0.3)     -- index 2, color-gated via PrismMix
-  registry.register("PrismTestC", 0.2)       -- index 3, name-gated
+  registry.register("PrismTestA", 0.4)       -- sequence 1, name-gated
+  registry.register(0xc0ffee, 0.3, 20)       -- highest priority, color-gated via PrismMix
+  registry.register("PrismTestC", 0.2, 10)   -- middle priority, name-gated
   registry.rebuild_color_index()
   local got = registry.filter_visible({
     PrismTestA = true,
@@ -293,30 +354,32 @@ T["registry"]["filter_visible interleaves groups and colors by registration orde
     PrismTestC = true,
   })
   eq(#got, 3)
-  eq(got[1].name, "PrismTestA")
-  eq(got[2].color_only, true)
-  eq(got[2].nudged_bg, 0xc0ffee)
-  eq(got[3].name, "PrismTestC")
+  eq(got[1].kind, "color")
+  eq(got[1].nudged_bg, 0xc0ffee)
+  eq(got[2].group, "PrismTestC")
+  eq(got[3].group, "PrismTestA")
 end
 
-T["registry"]["unregister removes a color-only registration"] = function()
-  registry.register_color(0xabc123, 0.5)
+T["registry"]["unregister removes a raw color registration"] = function()
+  registry.register(0xabc123, 0.5)
   registry.register("PrismTestA", 0.4)
   registry.unregister("#abc123")
   eq(#registry.all(), 1)
-  eq(registry.all()[1].name, "PrismTestA")
+  eq(registry.all()[1].group, "PrismTestA")
   eq(registry.all()[1].index, 1)
 end
 
-T["registry"]["on_colorscheme preserves color-only registrations verbatim"] = function()
-  registry.register_color(0xabc123, 0.5)
-  registry.register("PrismTestA", 0.4)
+T["registry"]["on_colorscheme preserves raw registrations and priority"] = function()
+  registry.register(0xabc123, 0.5, 20)
+  registry.register("PrismTestA", 0.4, 10)
   registry.on_colorscheme()
   local all = registry.all()
   eq(#all, 2)
-  eq(all[1].color_only, true)
+  eq(all[1].kind, "color")
   eq(all[1].nudged_bg, 0xabc123)
-  eq(all[2].name, "PrismTestA")
+  eq(all[1].priority, 20)
+  eq(all[2].group, "PrismTestA")
+  eq(all[2].priority, 10)
 end
 
 return T

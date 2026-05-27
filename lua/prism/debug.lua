@@ -88,10 +88,16 @@ end
 ---@return string label
 ---@return string? hl_group
 local function registration_label(reg)
-  if reg.name then
-    return reg.name, reg.name
+  if reg.kind == "group" then
+    return reg.group, reg.group
   end
-  return string.format("#%06x", reg.nudged_bg), color_highlight(reg.nudged_bg)
+  return reg.target, color_highlight(reg.nudged_bg)
+end
+
+---@param value number
+---@return string
+local function display_number(value)
+  return string.format("%.3g", value)
 end
 
 ---@param bucket { count: integer, last_us: number, mean_us: number, min_us: number, max_us: number }
@@ -147,7 +153,7 @@ local function content()
   local highlights = {}
 
   if #status.registrations == 0 then
-    lines[#lines + 1] = "(no registered groups)"
+    lines[#lines + 1] = "(no registered targets)"
     highlights[#highlights + 1] = {
       row = #lines - 1,
       col = 0,
@@ -159,12 +165,13 @@ local function content()
       local label, hl_group = registration_label(reg)
       local slot = slots[reg]
       local prefix = string.format("%s  ", slot and tostring(slot) or "-")
-      lines[#lines + 1] = prefix .. label
+      local meta = string.format("[%d p=%s] ", reg.index, display_number(reg.priority))
+      lines[#lines + 1] = prefix .. meta .. label
       if hl_group then
         highlights[#highlights + 1] = {
           row = #lines - 1,
-          col = #prefix,
-          end_col = #prefix + #label,
+          col = #prefix + #meta,
+          end_col = #prefix + #meta + #label,
           hl_group = hl_group,
         }
       end

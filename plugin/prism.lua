@@ -16,13 +16,20 @@ vim.api.nvim_create_user_command("PrismStatus", function()
     "registrations:",
   }
   for _, r in ipairs(s.registrations) do
-    if r.color_only then
-      lines[#lines + 1] = string.format("  [%d] (color)        opacity=%.3f  bg=#%06x", r.index, r.opacity, r.nudged_bg)
+    if r.kind == "color" then
+      lines[#lines + 1] = string.format(
+        "  [%d p=%.3g] (color)        opacity=%.3f  bg=#%06x",
+        r.index,
+        r.priority,
+        r.opacity,
+        r.nudged_bg
+      )
     else
       lines[#lines + 1] = string.format(
-        "  [%d] %-16s opacity=%.3f  bg=#%06x (orig #%06x)",
+        "  [%d p=%.3g] %-16s opacity=%.3f  bg=#%06x (orig #%06x)",
         r.index,
-        r.name,
+        r.priority,
+        r.group,
         r.opacity,
         r.nudged_bg,
         r.original_bg
@@ -32,7 +39,7 @@ vim.api.nvim_create_user_command("PrismStatus", function()
   lines[#lines + 1] = "slots:"
   for i = 1, 7 do
     local r = s.slots[i]
-    lines[#lines + 1] = string.format("  %d -> %s", i, r and r.name or "(empty)")
+    lines[#lines + 1] = string.format("  %d -> %s", i, r and r.target or "(empty)")
   end
   vim.api.nvim_echo(
     vim.tbl_map(function(l)

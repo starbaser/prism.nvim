@@ -70,8 +70,8 @@ T["debug"]["renders slot allocation in registration priority order"] = function(
   local win = open_with_two_groups()
   local buf = vim.api.nvim_win_get_buf(win)
   eq(vim.api.nvim_buf_get_lines(buf, 0, 2, false), {
-    "1  PrismFloatA",
-    "2  PrismFloatLonger",
+    "1  [1 p=0] PrismFloatA",
+    "2  [2 p=0] PrismFloatLonger",
   })
 end
 
@@ -95,9 +95,9 @@ T["debug"]["highlights each allocation line with the matching group"] = function
   local buf = vim.api.nvim_win_get_buf(win)
   local ns = vim.api.nvim_get_namespaces().prism_debug_float
   local marks = vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true })
-  eq(marks[1][3], 3)
+  eq(marks[1][3], 11)
   eq(marks[1][4].hl_group, "PrismFloatA")
-  eq(marks[2][3], 3)
+  eq(marks[2][3], 11)
   eq(marks[2][4].hl_group, "PrismFloatLonger")
 end
 
@@ -110,7 +110,10 @@ T["debug"]["refresh resizes after a longer group is registered"] = function()
   debug.refresh()
   eq(
     vim.api.nvim_win_get_width(win),
-    vim.fn.strdisplaywidth("-  PrismFloatLongestHighlightGroupNameWithEnoughCharactersToExceedStatsTable")
+    math.min(
+      vim.fn.strdisplaywidth("-  [3 p=0] PrismFloatLongestHighlightGroupNameWithEnoughCharactersToExceedStatsTable"),
+      vim.o.columns - 2
+    )
   )
 end
 

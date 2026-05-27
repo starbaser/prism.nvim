@@ -72,6 +72,21 @@ T["slots"]["reconcile returns 0 when nothing changes"] = function()
   eq(emitted, 0)
 end
 
+T["slots"]["re-emits when an existing registration changes its slot key"] = function()
+  local r1 = reg("A", 1, 0x111111, 0.5)
+  slots.reconcile({ r1 })
+  set_spy.calls, set_spy.call_count = {}, 0
+  clear_spy.calls, clear_spy.call_count = {}, 0
+
+  r1.opacity = 0.7
+  local emitted = slots.reconcile({ r1 })
+
+  eq(emitted, 1)
+  eq(set_spy.call_count, 1)
+  eq(clear_spy.call_count, 0)
+  eq(set_spy.calls[1], { 1, 0x111111, 0.7 })
+end
+
 T["slots"]["emits a slot change event when reconciliation mutates state"] = function()
   local count = slot_event_counter()
   local r1 = reg("A", 1, 0x111111, 0.5)

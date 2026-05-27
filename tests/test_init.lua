@@ -53,6 +53,35 @@ T["init"]["setup enables prism once"] = function()
   eq(terminal.pushes, 1)
 end
 
+T["init"]["setup registers unified targets and updates repeated config"] = function()
+  vim.api.nvim_set_hl(0, "PrismInitA", { bg = 0x010101 })
+  vim.api.nvim_set_hl(0, "PrismInitRaw", { bg = 0x101010 })
+
+  prism.setup({
+    registrations = {
+      { target = "PrismInitA", opacity = 0.4 },
+      { target = "#101010", opacity = 0.5, priority = 20 },
+    },
+  })
+  local regs = prism.status().registrations
+  eq(#regs, 2)
+  eq(regs[1].kind, "color")
+  eq(regs[1].priority, 20)
+  eq(regs[2].group, "PrismInitA")
+
+  prism.setup({
+    registrations = {
+      { target = "PrismInitA", opacity = 0.9, priority = 30 },
+      { target = "#101010", opacity = 0.5, priority = 20 },
+    },
+  })
+  regs = prism.status().registrations
+  eq(#regs, 2)
+  eq(regs[1].group, "PrismInitA")
+  eq(regs[1].opacity, 0.9)
+  eq(regs[1].priority, 30)
+end
+
 T["init"]["disable and enable control the kitty stack"] = function()
   prism.setup({})
   eq(prism.disable(), true)
@@ -82,6 +111,7 @@ T["init"]["plugin exposes debug and lifecycle commands"] = function()
   eq(commands.PrismDisable ~= nil, true)
   eq(commands.PrismToggle ~= nil, true)
   eq(commands.PrismGroups, nil)
+  eq(prism.register_color, nil)
   eq(pcall(vim.cmd, "PrismDebug!"), false)
 end
 

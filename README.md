@@ -29,10 +29,10 @@ vim.api.nvim_create_autocmd("ColorScheme", {
   callback = function()
     vim.schedule(function()
       require("prism").setup({
-        groups = {
-          { name = "NormalFloat", opacity = 0.80 },
-          { name = "CursorLine", opacity = 0.80 },
-          { name = "RenderMarkdownCode", opacity = 0.83 },
+        registrations = {
+          { target = "NormalFloat", opacity = 0.80, priority = 30 },
+          { target = "CursorLine", opacity = 0.80, priority = 20 },
+          { target = "RenderMarkdownCode", opacity = 0.83, priority = 10 },
         },
       })
     end)
@@ -42,28 +42,31 @@ vim.api.nvim_create_autocmd("ColorScheme", {
 vim.cmd.colorscheme("srcery")
 ```
 
-`groups` are highlight group names `prism.nvim` should watch.
-When one of those groups is visible, `prism.nvim` assigns its background to one of kitty’s seven
+`registrations` are targets `prism.nvim` should watch.
+Targets are highlight group names or raw 24-bit colors.
+When a registered target is visible, `prism.nvim` assigns its background to one of kitty’s seven
 `transparent_background_color` slots.
 `opacity` is the value sent to kitty for that slot.
-
-You can also key transparency directly by raw color instead of by highlight group:
+Higher `priority` values are selected first; ties keep first-registration order.
 
 ```lua
 require("prism").setup({
-  colors = {
-    { color = "#30302f", opacity = 0.83 },
+  registrations = {
+    { target = "NormalFloat", opacity = 0.80, priority = 20 },
+    { target = "#30302f", opacity = 0.83, priority = 10 },
   },
 })
 ```
 
-Raw colors are registered before highlight groups.
-Prism uses raw colors verbatim and nudges highlight-group backgrounds only when it needs distinct
-kitty color keys for different opacity entries.
+String targets matching `#RRGGBB` or `RRGGBB`, and numeric targets like `0x30302f`, are raw colors.
+All other strings are highlight groups.
+Raw colors are used verbatim.
+Highlight-group backgrounds are nudged only when Prism needs distinct kitty color keys for different
+opacity entries.
 
 ## Dynamic Highlights
 
-Use `setup({ groups = ... })` for static configuration.
+Use `setup({ registrations = ... })` for static configuration.
 Use `register()` when your config computes or rewrites highlight groups inside a `ColorScheme`
 callback:
 
@@ -77,9 +80,10 @@ vim.api.nvim_create_autocmd("ColorScheme", {
 
     vim.schedule(function()
       local prism = require("prism")
-      prism.register("NormalFloat", 0.80)
-      prism.register("CursorLine", 0.80)
-      prism.register("RenderMarkdownCode", 0.83)
+      prism.register("NormalFloat", 0.80, 30)
+      prism.register("CursorLine", 0.80, 20)
+      prism.register("RenderMarkdownCode", 0.83, 10)
+      prism.register("#30302f", 0.83)
     end)
   end,
 })
@@ -87,6 +91,9 @@ vim.api.nvim_create_autocmd("ColorScheme", {
 vim.g.srcery_normal_float = 1
 vim.cmd.colorscheme("srcery")
 ```
+
+`register(target, opacity, priority?)` is atomic: calling it again for the same highlight group or
+raw color updates the existing registration in place.
 
 ## Installation
 
@@ -133,10 +140,11 @@ The flake includes an `nvf` module at `nvfModules.default`.
         {
           vim.prism = {
             enable = true;
-            groups = [
-              {name = "NormalFloat"; opacity = 0.80;}
-              {name = "CursorLine"; opacity = 0.80;}
-              {name = "RenderMarkdownCode"; opacity = 0.83;}
+            registrations = [
+              {target = "NormalFloat"; opacity = 0.80; priority = 30;}
+              {target = "CursorLine"; opacity = 0.80; priority = 20;}
+              {target = "RenderMarkdownCode"; opacity = 0.83; priority = 10;}
+              {target = "#30302f"; opacity = 0.83;}
             ];
           };
         }
@@ -148,7 +156,7 @@ The flake includes an `nvf` module at `nvfModules.default`.
 
 The module configures `vim.extraPlugins.prism` and schedules `require("prism").setup(...)` after nvf
 applies the colorscheme.
-It exposes `groups`, `colors`, refresh throttling options, and `extraSetup` for
+It exposes `registrations`, refresh throttling options, and `extraSetup` for
 runtime-configuration in Lua.
 
 The scheduled callback matters because Prism reads the live highlight background and writes a nearby

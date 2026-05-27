@@ -31,11 +31,15 @@ end
 
 local function reg(name, bg)
   return {
-    name = name,
+    kind = name and "group" or "color",
+    target = name or string.format("#%06x", bg),
+    group = name,
+    color = name and nil or bg,
     index = 1,
     nudged_bg = bg,
     opacity = 0.5,
-    color_only = name == nil,
+    priority = 0,
+    sequence = 1,
   }
 end
 

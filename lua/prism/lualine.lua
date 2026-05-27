@@ -47,8 +47,8 @@ end
 ---@param reg prism.Registration
 ---@return string
 local function slot_highlight(reg)
-  if reg.name then
-    return reg.name
+  if reg.kind == "group" then
+    return reg.group
   end
   return color_highlight(reg.nudged_bg)
 end

@@ -11,17 +11,13 @@ local terminal = require("prism.terminal")
 ---@class prism
 local M = {}
 
----@class prism.GroupSpec
----@field name    string
+---@class prism.RegistrationSpec
+---@field target  string|integer
 ---@field opacity number
-
----@class prism.ColorSpec
----@field color   integer|string  0xRRGGBB or "#RRGGBB"
----@field opacity number
+---@field priority? number
 
 ---@class prism.Opts
----@field groups       prism.GroupSpec[]
----@field colors       prism.ColorSpec[]
+---@field registrations prism.RegistrationSpec[]
 ---@field debounce_ms  integer
 ---@field max_refresh_hz integer
 ---@field burst_window_ms integer
@@ -30,8 +26,7 @@ local M = {}
 
 ---@type prism.Opts
 local defaults = {
-  groups = {},
-  colors = {},
+  registrations = {},
   debounce_ms = 50,
   max_refresh_hz = 20,
   burst_window_ms = 100,
@@ -41,23 +36,14 @@ local defaults = {
 
 local active = false
 
----@param color integer|string
----@return boolean
-local function color_registered(color)
-  local rgb
-  if type(color) == "number" then
-    rgb = color
-  elseif type(color) == "string" then
-    rgb = tonumber(color:gsub("^#", ""), 16)
-  end
-  if not rgb then return false end
-
-  for _, reg in ipairs(registry.all()) do
-    if reg.color_only and reg.nudged_bg == rgb then
-      return true
-    end
-  end
-  return false
+---@param opts prism.Opts
+local function apply_options(opts)
+  if opts.registrations ~= nil then defaults.registrations = opts.registrations end
+  if opts.debounce_ms ~= nil then defaults.debounce_ms = opts.debounce_ms end
+  if opts.max_refresh_hz ~= nil then defaults.max_refresh_hz = opts.max_refresh_hz end
+  if opts.burst_window_ms ~= nil then defaults.burst_window_ms = opts.burst_window_ms end
+  if opts.burst_event_threshold ~= nil then defaults.burst_event_threshold = opts.burst_event_threshold end
+  if opts.burst_quiet_ms ~= nil then defaults.burst_quiet_ms = opts.burst_quiet_ms end
 end
 
 ---@nodiscard
@@ -86,23 +72,17 @@ end
 
 ---@param opts? prism.Opts
 function M.setup(opts)
-  defaults = vim.tbl_deep_extend("force", defaults, opts or {})
+  opts = opts or {}
+  apply_options(opts)
   if not can_enable() then return false end
 
-  local registration_count = #registry.all()
-  -- Colors reserve raw slots before groups compute nudged keys.
-  for _, c in ipairs(defaults.colors) do
-    if not color_registered(c.color) then
-      registry.register_color(c.color, c.opacity)
-    end
-  end
-  for _, g in ipairs(defaults.groups) do
-    if not registry.get(g.name) then
-      registry.register(g.name, g.opacity)
-    end
+  local changed = false
+  for _, spec in ipairs(defaults.registrations) do
+    local _, did_change = registry.register(spec.target, spec.opacity, spec.priority)
+    changed = changed or did_change
   end
   registry.rebuild_color_index()
-  if #registry.all() ~= registration_count then
+  if changed then
     signals.emit(signals.REGISTRY_CHANGED)
   end
 
@@ -113,25 +93,12 @@ function M.setup(opts)
   return activate()
 end
 
----@param name string
+---@param target string|integer
 ---@param opacity number
-function M.register(name, opacity)
-  local before = registry.get(name)
-  local reg = registry.register(name, opacity)
-  if reg and reg ~= before then
-    registry.rebuild_color_index()
-    if active then events.force_refresh() end
-    signals.emit(signals.REGISTRY_CHANGED)
-  end
-  return reg
-end
-
----@param color integer|string
----@param opacity number
-function M.register_color(color, opacity)
-  local registration_count = #registry.all()
-  local reg = registry.register_color(color, opacity)
-  if reg and #registry.all() ~= registration_count then
+---@param priority? number
+function M.register(target, opacity, priority)
+  local reg, changed = registry.register(target, opacity, priority)
+  if reg and changed then
     registry.rebuild_color_index()
     if active then events.force_refresh() end
     signals.emit(signals.REGISTRY_CHANGED)
@@ -141,9 +108,8 @@ end
 
 ---@param key string|integer
 function M.unregister(key)
-  local registration_count = #registry.all()
-  registry.unregister(key)
-  if #registry.all() ~= registration_count then
+  local changed = registry.unregister(key)
+  if changed then
     registry.rebuild_color_index()
     if active then events.force_refresh() end
     signals.emit(signals.REGISTRY_CHANGED)

@@ -13,6 +13,16 @@ M.MAX_SLOTS = 7
 ---@type table<integer, prism.Registration|nil>
 local current = {}
 
+---@type table<integer, string|nil>
+local current_keys = {}
+
+---@param reg prism.Registration?
+---@return string?
+local function slot_key(reg)
+  if not reg then return nil end
+  return string.format("%06x:%.17g", reg.nudged_bg, reg.opacity)
+end
+
 --- Set the new desired registration list. Existing visible occupants keep
 --- their slots; empty slots are filled from the priority-ordered desired
 --- list. Slots whose occupant changed are re-emitted; unchanged slots are
@@ -57,13 +67,15 @@ function M.reconcile(desired)
   for i = 1, M.MAX_SLOTS do
     local cur = current[i]
     local nxt = target[i]
-    if cur ~= nxt then
+    local nxt_key = slot_key(nxt)
+    if cur ~= nxt or current_keys[i] ~= nxt_key then
       if nxt then
         terminal.set_slot(i, nxt.nudged_bg, nxt.opacity)
       else
         terminal.clear_slot(i)
       end
       current[i] = nxt
+      current_keys[i] = nxt_key
       emitted = emitted + 1
     end
   end
@@ -81,6 +93,7 @@ function M.clear_all()
     if current[i] then
       terminal.clear_slot(i)
       current[i] = nil
+      current_keys[i] = nil
       changed = true
     end
   end
@@ -102,6 +115,7 @@ end
 --- Reset internal state. Test-only.
 function M._reset()
   current = {}
+  current_keys = {}
 end
 
 return M

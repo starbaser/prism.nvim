@@ -1,31 +1,192 @@
 # `prism.nvim` 💠
 
-Multi-faceted highlight group chroma keying for Neovim using
-[kitty’s graphic protocol’s color stack][kitty-protocol].
+Multi-faceted highlight group-based chroma keying for Neovim via
+[kitty’s graphics protocol color stack][kitty-protocol].
 
 ![prism.nvim demo](https://raw.githubusercontent.com/starbaser/prism.nvim/main/demo.gif)
 
 [kitty-protocol]: https://sw.kovidgoyal.net/kitty/color-stack/
 
-## Layout
+## Requirements
 
+- Neovim running inside kitty
+- The following options in your `kitty.conf`:
+
+```conf
+dynamic_background_opacity yes
+background_opacity 0.9 # must be < 1.0
+# Optionally:
+background_blur 64 # Any value > 0
 ```
-.
-├── flake.nix
-├── justfile
-├── lua/prism/
-│   └── init.lua
-├── plugin/prism.lua
-└── tests/
-    ├── helpers.lua
-    └── minimal_init.lua
-```
+
+> [!NOTE]
 
 ## Quickstart
+
+```lua
+vim.api.nvim_create_autocmd("ColorScheme", {
+  group = vim.api.nvim_create_augroup("prism_setup", { clear = true }),
+  callback = function()
+    vim.schedule(function()
+      require("prism").setup({
+        groups = {
+          { name = "NormalFloat", opacity = 0.80 },
+          { name = "CursorLine", opacity = 0.80 },
+          { name = "RenderMarkdownCode", opacity = 0.83 },
+        },
+      })
+    end)
+  end,
+})
+
+vim.cmd.colorscheme("srcery")
+```
+
+`groups` are highlight group names `prism.nvim` should watch.
+When one of those groups is visible, `prism.nvim` assigns its background to one of kitty’s seven
+`transparent_background_color` slots.
+`opacity` is the value sent to kitty for that slot.
+
+You can also key transparency directly by raw color instead of by highlight group:
+
+```lua
+require("prism").setup({
+  colors = {
+    { color = "#30302f", opacity = 0.83 },
+  },
+})
+```
+
+Raw colors are registered before highlight groups.
+Prism uses raw colors verbatim and nudges highlight-group backgrounds only when it needs distinct
+kitty color keys for different opacity entries.
+
+## Dynamic Highlights
+
+Use `setup({ groups = ... })` for static configuration.
+Use `register()` when your config computes or rewrites highlight groups inside a `ColorScheme`
+callback:
+
+```lua
+vim.api.nvim_create_autocmd("ColorScheme", {
+  group = vim.api.nvim_create_augroup("eigen_srcery_overrides", { clear = true }),
+  pattern = "srcery",
+  callback = function()
+    eigen.hl.update("RenderMarkdownCode", { bg = eigen.srcery.colors.gray2 })
+    eigen.hl.update("CursorLine", { bg = eigen.srcery.colors.gray2 })
+
+    vim.schedule(function()
+      local prism = require("prism")
+      prism.register("NormalFloat", 0.80)
+      prism.register("CursorLine", 0.80)
+      prism.register("RenderMarkdownCode", 0.83)
+    end)
+  end,
+})
+
+vim.g.srcery_normal_float = 1
+vim.cmd.colorscheme("srcery")
+```
+
+## Installation
+
+### `lazy.nvim`
+
+```lua
+{
+  "starbaser/prism.nvim",
+}
+```
+
+Load your colorscheme first, then call `setup()` after the highlight groups have their final
+backgrounds.
+
+### Nix Flake
+
+```nix
+{
+  inputs.prism.url = "github:starbaser/prism.nvim";
+}
+```
+
+The flake exposes:
+
+- `packages.${system}.default`
+- `overlays.default`
+
+#### `nvf`
+
+The flake includes an `nvf` module at `nvfModules.default`.
+
+```nix
+{
+  inputs.prism.url = "github:starbaser/prism.nvim";
+
+  outputs = {nixpkgs, nvf, prism, ...}: let
+    system = "x86_64-linux";
+    pkgs = import nixpkgs {inherit system;};
+  in {
+    packages.${system}.default = nvf.lib.neovimConfiguration {
+      inherit pkgs;
+      modules = [
+        prism.nvfModules.default
+        {
+          vim.prism = {
+            enable = true;
+            groups = [
+              {name = "NormalFloat"; opacity = 0.80;}
+              {name = "CursorLine"; opacity = 0.80;}
+              {name = "RenderMarkdownCode"; opacity = 0.83;}
+            ];
+          };
+        }
+      ];
+    };
+  };
+}
+```
+
+The module configures `vim.extraPlugins.prism` and schedules `require("prism").setup(...)` after nvf
+applies the colorscheme.
+It exposes `groups`, `colors`, refresh throttling options, and `extraSetup` for
+runtime-configuration in Lua.
+
+The scheduled callback matters because Prism reads the live highlight background and writes a nearby
+color key back into the group before kitty can match it.
+
+## Lualine
+
+The lualine component renders kitty’s seven Prism slots and opens `:PrismDebug` on click:
+
+```lua
+require("lualine").setup({
+  sections = {
+    lualine_x = {
+      {
+        "prism",
+        slot_icon = "󰜌 ",
+        empty_icon = "·",
+        show_empty = true,
+      },
+    },
+  },
+})
+```
+
+## Commands
+
+```vim
+:PrismEnable
+:PrismDisable
+:PrismToggle
+:PrismRefresh
+:PrismDebug
+```
+
+## Development
 
 ```sh
 direnv allow
 just lua-test
+just check
 ```
-
-Under construction …

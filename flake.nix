@@ -82,6 +82,7 @@
 
           devShells.default = pkgs.mkShell {
             packages = (with pkgs; [
+              gifsicle
               just
               watchexec
             ]) ++ [ testNvim ];

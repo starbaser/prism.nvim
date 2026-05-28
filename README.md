@@ -3,7 +3,7 @@
 Multi-faceted highlight group-based chroma keying for Neovim via
 [kitty’s graphics protocol color stack][kitty-protocol].
 
-![prism.nvim demo](https://raw.githubusercontent.com/starbaser/prism.nvim/main/demo.gif)
+![prism.nvim demo](./demo.gif)
 
 [kitty-protocol]: https://sw.kovidgoyal.net/kitty/color-stack/
 
@@ -19,7 +19,7 @@ background_opacity 0.9 # must be < 1.0
 background_blur 64 # Any value > 0
 ```
 
-> [!NOTE] `prism.nvim` is disabled when `$TERM` is not `xterm-kitty`
+> [!NOTE]
 
 ## Quickstart
 

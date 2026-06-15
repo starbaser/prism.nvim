@@ -19,8 +19,6 @@ background_opacity 0.9 # must be < 1.0
 background_blur 64 # Any value > 0
 ```
 
-> [!NOTE]
-
 ## Quickstart
 
 ```lua
